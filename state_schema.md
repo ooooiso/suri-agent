@@ -1,14 +1,20 @@
 ---
-description: state.db SQLite 数据库结构说明
-version: "0.1.0"
+description: 角色级独立 SQLite 数据库结构说明
+version: "1.0.0"
 owner: suri
 ---
 
-# state.db 数据库结构
+# 角色级独立数据库结构
 
 ## 说明
 
-`state.db` 是 Suri 平台的 SQLite 会话与记忆数据库，由 suri 初始化和管理。本文件描述其表结构，供主程序开发参考。
+Suri 平台采用**角色级独立存储**架构。每个角色拥有独立的 SQLite 数据库：
+
+```
+group/<department>/<role>/memories/role.db
+```
+
+不再使用全局的 `state.db`。每个 `role.db` 的表结构相同，数据按角色隔离。
 
 ## 表结构
 
@@ -28,7 +34,7 @@ owner: suri
 |------|------|------|
 | task_id | TEXT PRIMARY KEY | 任务唯一 ID |
 | session_id | TEXT | 所属会话 |
-| requester_role | TEXT | 请求角色（通常是 suri） |
+| requester_role | TEXT | 请求角色 |
 | target_department | TEXT | 目标部门 |
 | target_director | TEXT | 目标总监 |
 | status | TEXT | pending / in_progress / completed / failed / cancelled |
@@ -74,4 +80,11 @@ owner: suri
 
 ## 初始化
 
-主程序首次启动时，suri 应检查表是否存在，不存在则按上述结构创建。
+角色首次创建或首次访问记忆时，`MemoryService` 自动检查并初始化对应角色的 `role.db` 表结构。
+
+## 迁移说明
+
+- 旧架构：`state.db`（全局数据库，所有角色共用）
+- 新架构：`group/<role>/memories/role.db`（角色级独立存储）
+- 迁移日期：2026-04-30
+- 原因：权限边界模糊、数据混乱 → 角色隔离、安全性提升

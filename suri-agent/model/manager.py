@@ -1,0 +1,283 @@
+"""
+模型管理器
+
+职责：
+- 管理模型配置（名称、API Key、端点）
+- 调用模型 API 生成回复
+- 首次启动引导配置
+"""
+
+import json
+import os
+from pathlib import Path
+from typing import Dict, List, Optional
+from dataclasses import dataclass, asdict
+
+
+@dataclass
+class ModelConfig:
+    """单个模型配置"""
+    name: str           # 模型显示名称
+    model_id: str       # 模型标识（如 gpt-4o、claude-3-5-sonnet）
+    api_key: str        # API Key
+    base_url: str       # API 端点
+    provider: str       # 提供商（openai、anthropic、moonshot 等）
+    is_default: bool = False
+
+
+class ModelManager:
+    """模型管理器"""
+    
+    CONFIG_FILE = "model_config.json"
+    
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        self.config_path = project_root / self.CONFIG_FILE
+        self._models: Dict[str, ModelConfig] = {}
+        self._load()
+    
+    def _load(self) -> None:
+        """加载模型配置"""
+        if self.config_path.exists():
+            try:
+                data = json.loads(self.config_path.read_text(encoding="utf-8"))
+                for key, val in data.items():
+                    self._models[key] = ModelConfig(**val)
+            except Exception as e:
+                print(f"[ModelManager] 加载配置失败: {e}")
+    
+    def _save(self) -> None:
+        """保存模型配置"""
+        data = {k: asdict(v) for k, v in self._models.items()}
+        self.config_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    
+    def is_first_run(self) -> bool:
+        """检查是否首次运行（无模型配置）"""
+        return len(self._models) == 0
+    
+    def setup_wizard(self) -> bool:
+        """
+        首次启动引导配置
+        返回是否配置成功
+        """
+        print("")
+        print("=" * 50)
+        print("  首次启动 — 模型配置")
+        print("=" * 50)
+        print("")
+        print("请配置您的 AI 模型，suri 将通过该模型与您交流。")
+        print("")
+        
+        # API Key
+        api_key = input("API Key: ").strip()
+        
+        # 模型名称（根据模型名自动推断提供商和端点）
+        print("\n支持的模型: glm-4 / moonshot-v1-8k / deepseek-chat / gpt-4o / claude-3-5-sonnet / ...")
+        model_id = input("模型 ID: ").strip()
+        
+        # 根据模型名推断提供商和端点
+        model_lower = model_id.lower()
+        if "glm" in model_lower:
+            provider_name = "glm"
+            base_url = "https://open.bigmodel.cn/api/paas/v4"
+        elif "moonshot" in model_lower:
+            provider_name = "moonshot"
+            base_url = "https://api.moonshot.cn/v1"
+        elif "deepseek" in model_lower:
+            provider_name = "deepseek"
+            base_url = "https://api.deepseek.com/v1"
+        elif "gpt" in model_lower:
+            provider_name = "openai"
+            base_url = "https://api.openai.com/v1"
+        elif "claude" in model_lower:
+            provider_name = "anthropic"
+            base_url = "https://api.anthropic.com/v1"
+        else:
+            # 无法推断，询问用户
+            print(f"\n未能自动识别模型 '{model_id}' 的提供商，请手动选择：")
+            print("  1) OpenAI")
+            print("  2) Moonshot (Kimi)")
+            print("  3) DeepSeek")
+            print("  4) GLM (智谱 AI)")
+            print("  5) Anthropic (Claude)")
+            print("  6) 自定义")
+            p_choice = input("\n输入选项 [1-6]: ").strip()
+            manual = {
+                "1": ("openai", "https://api.openai.com/v1"),
+                "2": ("moonshot", "https://api.moonshot.cn/v1"),
+                "3": ("deepseek", "https://api.deepseek.com/v1"),
+                "4": ("glm", "https://open.bigmodel.cn/api/paas/v4"),
+                "5": ("anthropic", "https://api.anthropic.com/v1"),
+            }
+            provider_name, base_url = manual.get(p_choice, ("", ""))
+            if not provider_name:
+                base_url = input("API 端点 (如 https://api.example.com/v1): ").strip()
+                provider_name = input("提供商名称 (用于标识): ").strip() or "custom"
+        
+        # 显示名称
+        name = input(f"\n显示名称 [默认: {model_id}]: ").strip() or model_id
+        
+        if not model_id or not api_key or not base_url:
+            print("\n❌ 配置失败：模型 ID、API Key 和端点不能为空")
+            return False
+        
+        # 保存到 .env
+        env_path = self.project_root / ".env"
+        env_lines = []
+        if env_path.exists():
+            env_lines = env_path.read_text(encoding="utf-8").splitlines()
+        
+        # 更新或添加环境变量
+        env_dict = {}
+        for line in env_lines:
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                env_dict[k.strip()] = v.strip()
+        
+        env_dict["DEFAULT_MODEL"] = model_id
+        env_dict["DEFAULT_MODEL_API_KEY"] = api_key
+        env_dict["DEFAULT_MODEL_BASE_URL"] = base_url
+        env_dict["DEFAULT_MODEL_PROVIDER"] = provider_name.lower().replace(" ", "_")
+        
+        env_content = "\n".join(f"{k}={v}" for k, v in env_dict.items())
+        env_path.write_text(env_content + "\n", encoding="utf-8")
+        
+        # 添加到模型池
+        self.add_model(name, model_id, api_key, base_url, provider_name.lower().replace(" ", "_"), is_default=True)
+        
+        print("\n✅ 模型配置完成！")
+        print(f"   模型: {name} ({model_id})")
+        print(f"   提供商: {provider_name}")
+        print("")
+        return True
+    
+    def add_model(self, name: str, model_id: str, api_key: str,
+                  base_url: str, provider: str, is_default: bool = False) -> None:
+        """添加模型"""
+        if is_default:
+            # 取消其他模型的默认状态
+            for m in self._models.values():
+                m.is_default = False
+        
+        self._models[model_id] = ModelConfig(
+            name=name,
+            model_id=model_id,
+            api_key=api_key,
+            base_url=base_url,
+            provider=provider,
+            is_default=is_default,
+        )
+        self._save()
+    
+    def list_models(self) -> List[ModelConfig]:
+        """列出所有模型"""
+        return list(self._models.values())
+    
+    def get_default_model(self) -> Optional[ModelConfig]:
+        """获取默认模型"""
+        for m in self._models.values():
+            if m.is_default:
+                return m
+        # 如果没有默认模型，返回第一个
+        if self._models:
+            return list(self._models.values())[0]
+        return None
+    
+    def set_default(self, model_id: str) -> bool:
+        """设置默认模型"""
+        if model_id not in self._models:
+            return False
+        for m in self._models.values():
+            m.is_default = False
+        self._models[model_id].is_default = True
+        self._save()
+        return True
+    
+    def chat(self, messages: List[Dict[str, str]], 
+             model_id: Optional[str] = None) -> Optional[str]:
+        """
+        调用模型生成回复
+        
+        Args:
+            messages: 消息列表，每项含 role 和 content
+            model_id: 指定模型，默认使用默认模型
+            
+        Returns:
+            模型回复文本，或 None（调用失败）
+        """
+        model = self._models.get(model_id) if model_id else self.get_default_model()
+        if not model:
+            return None
+        
+        # 根据提供商调用对应 API
+        if model.provider in ["openai", "moonshot", "deepseek"]:
+            return self._call_openai_compatible(model, messages)
+        elif model.provider == "anthropic":
+            return self._call_anthropic(model, messages)
+        else:
+            # 默认使用 OpenAI 兼容格式
+            return self._call_openai_compatible(model, messages)
+    
+    def _call_openai_compatible(self, model: ModelConfig, 
+                                 messages: List[Dict[str, str]]) -> Optional[str]:
+        """调用 OpenAI 兼容格式的 API"""
+        try:
+            import urllib.request
+            import urllib.error
+            
+            url = f"{model.base_url}/chat/completions"
+            data = json.dumps({
+                "model": model.model_id,
+                "messages": messages,
+                "temperature": 0.7,
+            }).encode("utf-8")
+            
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {model.api_key}",
+                },
+                method="POST",
+            )
+            
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                return result["choices"][0]["message"]["content"]
+                
+        except Exception as e:
+            print(f"[ModelManager] API 调用失败: {e}")
+            return None
+    
+    def _call_anthropic(self, model: ModelConfig,
+                        messages: List[Dict[str, str]]) -> Optional[str]:
+        """调用 Anthropic API"""
+        try:
+            import urllib.request
+            
+            url = f"{model.base_url}/messages"
+            data = json.dumps({
+                "model": model.model_id,
+                "messages": messages,
+                "max_tokens": 4096,
+            }).encode("utf-8")
+            
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": model.api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+                method="POST",
+            )
+            
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                return result["content"][0]["text"]
+                
+        except Exception as e:
+            print(f"[ModelManager] Anthropic API 调用失败: {e}")
+            return None

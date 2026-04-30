@@ -234,7 +234,7 @@ class UIGatewayServer:
         self.config.load_all()
         
         self.memory = MemoryService(self.project_root, self.config)
-        self.security = SecurityService(self.config)
+        self.security = SecurityService(self.project_root, self.config)
         self.filesystem = FileService(self.project_root, self.security)
         self.approval = ApprovalService(self.config, self.memory, self.security)
         self.task = TaskService(self.config, self.memory, None, None, None)

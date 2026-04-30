@@ -1,0 +1,32 @@
+# suri 运行时生成文件 — 不应提交到 git
+
+# 环境变量（首次运行引导生成）
+.env
+
+# 运行时配置（首次运行生成）
+config.yaml
+
+# 模型配置（/model add 生成）
+model_config.json
+
+# 文档同步规则状态（自动持久化）
+.doc_sync_rule_state.json
+
+# 日志文件（按天自动生成）
+logs/*/*.log
+
+# 角色记忆数据库（运行时生成）
+group/**/memories/*.db
+
+# 运行时资源
+resources/cache/*
+resources/sessions/*
+resources/temp/*
+
+# 后台进程文件
+logs/system/.suri.pid
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

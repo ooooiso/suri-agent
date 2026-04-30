@@ -4,13 +4,13 @@ suri-agent 入口
 
 启动顺序：
 1. 加载环境变量 (.env)
-2. 初始化 ConfigService（读取所有外部配置）
-3. 初始化 MemoryService（连接 state.db）
-4. 初始化 SecurityService（加载安全规则）
+2. 初始化 ConfigService（扫描 group/、skills/、tools/ 中的 .md 配置）
+3. 初始化 MemoryService（角色级独立 SQLite 存储）
+4. 初始化 SecurityService（加载代码化安全规则）
 5. 初始化 FileService（注册安全钩子）
-6. 初始化 ModelService（加载模型池）
+6. 初始化 ModelService（模型路由）
 7. 初始化 ContextService（上下文构建器）
-8. 初始化 CommService（连接 Telegram）
+8. 初始化 CommService（连接 Telegram，可选）
 9. 初始化 ApprovalService（审批引擎）
 10. 初始化 ToolService（工具执行器）
 11. 初始化 TaskService（调度引擎）

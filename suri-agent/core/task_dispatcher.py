@@ -32,12 +32,13 @@ class TaskService:
     """
     
     def __init__(self, config: ConfigService, memory: MemoryService,
-                 context: ContextService, model: ModelService, comm: CommService):
+                 context: ContextService, model: ModelService, comm: CommService, logger=None):
         self.config = config
         self.memory = memory
         self.context = context
         self.model = model
         self.comm = comm
+        self.logger = logger
     
     def receive_task(self, user_id: str, raw_input: str) -> str:
         """
@@ -49,17 +50,23 @@ class TaskService:
         task_id = f"task_{uuid.uuid4().hex[:8]}"
         session_id = f"session_{user_id}_{datetime.now().strftime('%Y%m%d')}"
         
-        # 创建任务记录
-        self.memory.create_task(task_id, session_id, 'suri', 'pending', 'suri')
+        # 创建任务记录（在 suri 的数据库中）
+        self.memory.create_task('suri', task_id, session_id, 'user', 'central', 'suri')
         
         # 保存初始消息
         self.memory.save_message(
+            'suri',
             message_id=f"msg_{uuid.uuid4().hex[:8]}",
             task_id=task_id,
             sender='user',
             receiver='suri',
             body={'type': 'task', 'content': raw_input}
         )
+        
+        # 记录任务调度日志
+        if self.logger:
+            self.logger.log_task_created(task_id, user_id, raw_input)
+            self.logger.log_task_dispatched(task_id, 'user', 'suri', 'central')
         
         print(f"[TaskService] 新任务 {task_id} 来自用户 {user_id}")
         return task_id

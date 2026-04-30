@@ -20,35 +20,60 @@
 
 ```
 suri/                               # 项目根目录
-├── .env                            # 环境变量与密钥
-├── config.yaml                     # 运行时参数配置
-├── requirements.txt                # Python 依赖
-├── run.sh                          # 启动脚本
-├── state_schema.md                 # 数据库表结构说明
-├── wiki/                           # 知识库（预留）
 │
+│  【源代码/配置模板 — 程序运行前已存在】
+├── requirements.txt                # Python 依赖清单（源代码）
+├── run.sh                          # 启动脚本（源代码）
+├── install.sh                      # 安装脚本（源代码）
+├── suri                            # 客户端命令（源代码）
+├── suri-daemon                     # 后台管理命令（源代码）
+├── .env.example                    # 环境变量模板（配置模板）
+├── state_schema.md                 # 数据库表结构说明文档
+│
+│  【运行时生成 — 程序运行后自动创建/修改】
+├── .env                            # 环境变量（首次运行引导写入）
+├── config.yaml                     # 运行时参数（首次运行写入，可热重载）
+├── model_config.json               # 模型配置（/model add 写入）
+├── .doc_sync_rule_state.json       # 文档同步规则状态（自动持久化）
+│
+│  【知识库 — 可编辑】
+├── wiki/                           # 知识库（用户面向，可编辑）
+│
+│
+│  【角色定义 — 源代码（运行前）+ 运行时记忆（运行后生成）】
 ├── group/                          # 角色组
 │   ├── central/                    # 中枢部门
-│   │   ├── suri/                   # 核心调度角色
-│   │   ├── suri-hr/                # 角色管理员
-│   │   └── suri-dev/               # 主程序维护
+│   │   ├── suri/                   # 核心调度角色（源代码：suri.md）
+│   │   ├── suri-hr/                # 角色管理员（源代码：suri-hr.md + 技能模板）
+│   │   ├── suri-dev/               # 主程序维护（源代码：suri-dev.md）
+│   │   └── document-review/        # 文档审核员（源代码：document-review.md）
 │   ├── _archived/                  # 已归档角色（保留30天）
-│   └── group_function.md           # 部门职能索引与角色能力速查
+│   └── group_function.md           # 部门职能索引与角色能力速查（源代码）
 │
-├── skills/                         # suri 专属技能库
+│  ⚠️ 注意：group/<role>/memories/role.db 为运行时生成，运行前不应存在
+│
+├── skills/                         # suri 专属技能库（源代码）
 │   ├── task_dispatch/              # 需求解析、部门匹配、任务下发
 │   ├── escalation/                 # 任务升级、重试耗尽、用户回流
 │   ├── user_approval/              # 安全审批流程中向用户请求确认
 │   ├── exception_handler/          # 通用异常捕获与分类处理
 │   └── cross_department_sync/      # 跨部门协作进度同步
 │
+│  【日志目录 — 运行前仅有 .md 说明，.log 文件为运行时生成】
+├── logs/                           # 运行日志（按模块分类，按天轮转）
+│   ├── runtime/                    # 程序运行日志
+│   ├── error/                      # 错误日志
+│   ├── schedule/                   # 调度日志
+│   ├── role/                       # 角色通信日志
+│   └── system/                     # 系统日志
+│
+│  【运行时资源 — 运行前为空目录，运行后自动填充】
 ├── resources/                      # 运行时资源
 │   ├── cache/                      # 运行时缓存
-│   ├── logs/                       # 运行日志
-│   ├── memories/                   # 全局长期记忆（兼容预留）
-│   ├── sessions/                   # 会话记录（兼容预留）
+│   ├── sessions/                   # 会话记录
 │   └── temp/                       # 临时文件
 │
+│  【主程序 — 全部源代码，运行前已存在】
 └── suri-agent/                     # 主程序
     ├── main.py                     # 主程序入口
     ├── suri-agent.md               # 本文档（核心框架定义）
@@ -73,7 +98,21 @@ suri/                               # 项目根目录
     │   ├── model_router.py         # 模型路由
     │   ├── context.py              # 上下文管理
     │   ├── approval.py             # 审批引擎
-    │   └── tool_executor.py        # 工具执行器
+    │   ├── tool_executor.py        # 工具执行器
+    │   └── doc_sync.py             # 文档同步服务
+    │
+    ├── model/                      # 模型管理
+    │   ├── model.md                # 模型管理说明
+    │   ├── __init__.py             # 入口
+    │   └── manager.py              # 模型配置与调用管理
+    │
+    ├── memory/                     # 记忆总目录
+    │   ├── memory.md               # 记忆总目录说明
+    │   └── ai-dev-memory/          # AI 开发记忆
+    │       ├── ai-dev-memory.md    # AI 开发记忆总览
+    │       ├── architecture.md     # 架构决策记录
+    │       ├── development-log.md  # 开发日志
+    │       └── module-index.md     # 模块索引
     │
     ├── infrastructure/             # 基础设施层
     │   ├── infrastructure.md       # 基础设施层说明
@@ -81,6 +120,7 @@ suri/                               # 项目根目录
     │   ├── memory.py               # 记忆服务（角色级独立存储）
     │   ├── security.py             # 安全服务
     │   ├── filesystem.py           # 文件服务
+    │   ├── logger.py               # 日志服务（中文日志、按天轮转）
     │   └── utils.py                # 通用工具函数
     │
     ├── mcp/                        # MCP 扩展框架
@@ -170,6 +210,10 @@ suri/                               # 项目根目录
 - can：维护 suri-agent/ 核心代码、修复平台运行中的 Bug、升级框架版本、优化性能与稳定性、确保核心流程正常运行
 - cannot：处理业务需求、修改角色配置、操作受保护的外部配置、介入业务角色的具体任务
 
+**document-review**
+- can：审核角色提交的文档更新、检查文档与代码一致性、生成审核报告、向用户汇报请求确认、审核通过后执行文档写入
+- cannot：直接修改代码或配置文件、替用户做决策、跳过审核直接写入文档
+
 ### 3.4 角色文件夹标准结构
 
 ```
@@ -198,11 +242,13 @@ group/<department>/<role_id>/
 | 层级 | 目录 | 职责 |
 |------|------|------|
 | 接入层 | `access/` | 对接用户交互入口（TUI、Telegram、飞书） |
-| 核心调度层 | `core/` | 任务调度、模型路由、审批、上下文、工具执行 |
+| 核心调度层 | `core/` | 任务调度、模型路由、审批、上下文、工具执行、文档同步 |
 | 基础设施层 | `infrastructure/` | 配置加载、记忆（角色级独立存储）、安全、文件系统 |
 | 扩展框架 | `mcp/` | MCP 服务注册与调用，可动态扩展 |
 | 角色管理 | `role/` | 角色协同调度、通信管理、搭建规则执行 |
-| 规则执行 | `rules/` | 7 条核心业务规则，代码化执行 |
+| 模型管理 | `model/` | 模型配置、API Key 管理、首次运行引导、外部模型调用 |
+| 记忆中枢 | `memory/` | 各类记忆统一存储：AI 开发记忆、未来可扩展会话/任务/交互记忆 |
+| 规则执行 | `rules/` | 8 条核心业务规则，代码化执行 |
 | 流程执行 | `process/` | 平台级流程，代码化执行 |
 | 公共工具 | `tools/` | 跨角色可复用工具库，角色可选调用 |
 | 事件钩子 | `hooks/` | 文件操作拦截器 |
@@ -224,12 +270,20 @@ group/<department>/<role_id>/
 - `context.py`：构建角色上下文，注入 Soul、技能、记忆
 - `approval.py`：安全审批流程管理
 - `tool_executor.py`：调用公共工具，执行角色技能中的脚本
+- `doc_sync.py`：文档同步服务，检测代码变更→调用大模型生成摘要→用户确认→写入核心记忆库
+
+**model/** — 模型管理
+- `manager.py`：模型配置加载/保存、添加/删除/列出模型、设置默认模型、调用外部模型 API 生成回复
+- 首次运行时引导用户配置模型参数（模型选择、API Key、端点地址）
+- 支持 OpenAI 兼容格式和 Anthropic API
+- 配置保存在 `model_config.json` 和 `.env` 中
 
 **infrastructure/** — 基础设施层
 - `config.py`：扫描并解析 group/、skills/、suri-agent/tools/ 中的 .md 配置
 - `memory.py`：每个角色独立的 SQLite 存储 + 文本记忆文件管理
 - `security.py`：调用 FileOwnershipRule 和 SecurityRule 执行权限校验
 - `filesystem.py`：带安全钩子的文件操作
+- `logger.py`：日志服务，中文输出，按天轮转存储于 `resources/logs/`，记录系统/调度/模型/通信等事件
 - `utils.py`：通用工具函数
 
 **mcp/** — MCP 扩展框架
@@ -266,6 +320,8 @@ group/<department>/<role_id>/
 | role_management | 角色生命周期 | suri-hr | ID验证、创建/修改/注销流程、归档清理 |
 | code_commit | 代码提交规范 | suri-dev | 变更报告校验、紧急修复时限、审计追溯 |
 | 文档同步规则 | 文档同步 | suri | suri-agent/ 下每个文件夹必须配有同名 .md 文件，事件发生时同步更新 |
+| 核心记忆同步规则 | 核心记忆 | document-review | 每次开发完成后检测代码变更，调用大模型生成摘要，经审核、用户确认后写入 suri-agent/memory/ai-dev-memory/ |
+| 文档同步自动化规则 | 文档同步 | document-review | DocSyncRule + DocWatcher 自动监控代码变更，检测缺失/过时文档，驱动大模型生成更新建议，经审核后自动写入 |
 
 ---
 
@@ -337,8 +393,9 @@ group/<department>/<role_id>/
 5. 初始化 FileService（带安全钩子）
 6. 初始化 ModelService（模型路由）
 7. 初始化 ContextService（上下文构建）
-8. 初始化 RoleManager（协同、通信、搭建）
-9. 初始化 ApprovalService（审批引擎）
+8. 初始化 ModelManager（模型配置与调用）
+9. 初始化 RoleManager（协同、通信、搭建）
+10. 初始化 ApprovalService（审批引擎）
 10. 初始化 ToolService（工具执行器）
 11. 初始化 TaskService（调度引擎）
 12. 初始化 MCPRegistry（MCP 扩展）
@@ -368,6 +425,8 @@ group/<department>/<role_id>/
 | 新增 MCP 服务 | 在 mcp/services/ 下创建 | 继承 BaseMCPService，自动加载 |
 | 新增规则 | 修改 rules/ | 继承 BaseRule，注册到 RuleEngine |
 | 新增流程 | 修改 process/ | 继承 BaseProcess，注册到 ProcessEngine |
+| 核心记忆更新 | 调用 DocSyncService | 开发完成后自动检测变更，生成摘要，审核后写入 |
+| 文档自动同步 | DocSyncRule + DocWatcher | 后台监控代码变更，自动检测违规项，驱动大模型更新 |
 
 ---
 
@@ -376,6 +435,15 @@ group/<department>/<role_id>/
 | 日期 | 变更内容 | 变更人 |
 |------|---------|--------|
 | 2026-04-30 | 初始化 suri-agent.md | suri |
+| 2026-04-30 | 新增 model/ 模型管理模块 | suri |
+| 2026-04-30 | 新增 suri-agent/memory/ai-dev-memory/ AI 开发记忆库 | suri |
+| 2026-04-30 | 新增 document-review 文档审核角色 | suri |
+| 2026-04-30 | 新增 core/doc_sync.py 文档同步服务 | suri |
+| 2026-04-30 | 全面梳理文档同步规则：补充 16+ 个缺失的同名 .md 文档 | suri |
+| 2026-04-30 | 重写 model/model.md，同步所有模块变更至 suri-agent.md | suri |
+| 2026-04-30 | 新增 LoggerService 日志服务 | suri |
+| 2026-04-30 | 新增 DocSyncRule 文档同步规则引擎 + DocWatcher 文件监控钩子 | suri |
+| 2026-04-30 | 建立"代码变更即文档更新"自动化闭环规则 | suri |
 
 ---
 

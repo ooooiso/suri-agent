@@ -12,6 +12,7 @@ departments:
       - suri
       - suri-hr
       - suri-dev
+      - document-review
     group_chat: "@suri_central_group"
     collaboration: []
 
@@ -72,6 +73,7 @@ roles:
 | suri | 调度总监 | 需求解析、任务分发、跨部门协调、异常处理、汇总交付 | 任何用户需求的第一入口 |
 | suri-hr | 角色管理 | 角色创建、能力分析、流程模板、组织架构维护 | 需要新建/修改/注销角色时 |
 | suri-dev | 程序维护 | Bug修复、代码升级、性能优化、框架维护 | 平台技术问题、升级需求 |
+| document-review | 文档审核 | 文档一致性审查、变更确认、更新汇报 | 新增/修改模块后需要更新文档时 |
 
 ## 快速匹配指南
 
@@ -79,4 +81,5 @@ roles:
 
 - "新建角色" / "创建角色" / "需要XX能力" → **suri-hr**
 - "平台报错" / "Bug" / "升级" / "性能问题" → **suri-dev**
+- "文档更新" / "审核变更" / "记录日志" / "同步文档" → **document-review**
 - 其他所有业务需求 → **suri**（由 suri 进一步分派）
