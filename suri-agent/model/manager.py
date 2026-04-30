@@ -67,63 +67,45 @@ class ModelManager:
         
         print("")
         print("=" * 50)
-        print("  首次启动 — 模型配置")
+        print("  欢迎使用 Suri 智能体平台")
         print("=" * 50)
         print("")
-        print("请配置您的 AI 模型，suri 将通过该模型与您交流。")
+        print("请选择您的 AI 模型提供商：")
+        print("")
+        print("  1) GLM-4 (智谱 AI)    ← 推荐")
+        print("  2) Moonshot (Kimi)")
+        print("  3) DeepSeek")
+        print("  4) GPT-4o (OpenAI)")
+        print("  5) Claude (Anthropic)")
+        print("  6) 自定义")
         print("")
         
-        # API Key
+        presets = {
+            "1": ("GLM-4", "glm-4", "glm", "https://open.bigmodel.cn/api/paas/v4"),
+            "2": ("Moonshot", "moonshot-v1-8k", "moonshot", "https://api.moonshot.cn/v1"),
+            "3": ("DeepSeek", "deepseek-chat", "deepseek", "https://api.deepseek.com/v1"),
+            "4": ("GPT-4o", "gpt-4o", "openai", "https://api.openai.com/v1"),
+            "5": ("Claude", "claude-3-5-sonnet", "anthropic", "https://api.anthropic.com/v1"),
+        }
+        
+        choice = input("输入选项 [1-6]: ").strip()
+        
+        if choice in presets:
+            name, model_id, provider_name, base_url = presets[choice]
+        elif choice == "6":
+            name = input("显示名称: ").strip()
+            model_id = input("模型 ID: ").strip()
+            base_url = input("API 端点: ").strip()
+            provider_name = input("提供商名称: ").strip() or "custom"
+        else:
+            print("\n❌ 无效选项，请重新运行程序")
+            return False
+        
+        print(f"\n请输入您的 {name} API Key:")
         api_key = input("API Key: ").strip()
         
-        # 模型名称（根据模型名自动推断提供商和端点）
-        print("\n支持的模型: glm-4 / moonshot-v1-8k / deepseek-chat / gpt-4o / claude-3-5-sonnet / ...")
-        model_id = input("模型 ID: ").strip()
-        
-        # 根据模型名推断提供商和端点
-        model_lower = model_id.lower()
-        if "glm" in model_lower:
-            provider_name = "glm"
-            base_url = "https://open.bigmodel.cn/api/paas/v4"
-        elif "moonshot" in model_lower:
-            provider_name = "moonshot"
-            base_url = "https://api.moonshot.cn/v1"
-        elif "deepseek" in model_lower:
-            provider_name = "deepseek"
-            base_url = "https://api.deepseek.com/v1"
-        elif "gpt" in model_lower:
-            provider_name = "openai"
-            base_url = "https://api.openai.com/v1"
-        elif "claude" in model_lower:
-            provider_name = "anthropic"
-            base_url = "https://api.anthropic.com/v1"
-        else:
-            # 无法推断，询问用户
-            print(f"\n未能自动识别模型 '{model_id}' 的提供商，请手动选择：")
-            print("  1) OpenAI")
-            print("  2) Moonshot (Kimi)")
-            print("  3) DeepSeek")
-            print("  4) GLM (智谱 AI)")
-            print("  5) Anthropic (Claude)")
-            print("  6) 自定义")
-            p_choice = input("\n输入选项 [1-6]: ").strip()
-            manual = {
-                "1": ("openai", "https://api.openai.com/v1"),
-                "2": ("moonshot", "https://api.moonshot.cn/v1"),
-                "3": ("deepseek", "https://api.deepseek.com/v1"),
-                "4": ("glm", "https://open.bigmodel.cn/api/paas/v4"),
-                "5": ("anthropic", "https://api.anthropic.com/v1"),
-            }
-            provider_name, base_url = manual.get(p_choice, ("", ""))
-            if not provider_name:
-                base_url = input("API 端点 (如 https://api.example.com/v1): ").strip()
-                provider_name = input("提供商名称 (用于标识): ").strip() or "custom"
-        
-        # 显示名称
-        name = input(f"\n显示名称 [默认: {model_id}]: ").strip() or model_id
-        
-        if not model_id or not api_key or not base_url:
-            print("\n❌ 配置失败：模型 ID、API Key 和端点不能为空")
+        if not api_key:
+            print("\n❌ API Key 不能为空")
             return False
         
         # 保存到 .env
@@ -132,7 +114,6 @@ class ModelManager:
         if env_path.exists():
             env_lines = env_path.read_text(encoding="utf-8").splitlines()
         
-        # 更新或添加环境变量
         env_dict = {}
         for line in env_lines:
             if "=" in line and not line.startswith("#"):
@@ -142,13 +123,13 @@ class ModelManager:
         env_dict["DEFAULT_MODEL"] = model_id
         env_dict["DEFAULT_MODEL_API_KEY"] = api_key
         env_dict["DEFAULT_MODEL_BASE_URL"] = base_url
-        env_dict["DEFAULT_MODEL_PROVIDER"] = provider_name.lower().replace(" ", "_")
+        env_dict["DEFAULT_MODEL_PROVIDER"] = provider_name
         
         env_content = "\n".join(f"{k}={v}" for k, v in env_dict.items())
         env_path.write_text(env_content + "\n", encoding="utf-8")
         
         # 添加到模型池
-        self.add_model(name, model_id, api_key, base_url, provider_name.lower().replace(" ", "_"), is_default=True)
+        self.add_model(name, model_id, api_key, base_url, provider_name, is_default=True)
         
         print("\n✅ 模型配置完成！")
         print(f"   模型: {name} ({model_id})")

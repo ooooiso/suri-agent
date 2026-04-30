@@ -94,14 +94,18 @@ class SuriTerminal:
         # 文档监控钩子
         self.doc_watcher = DocWatcher(self.project_root)
         
-        # 首次运行引导
-        if self.model_manager.is_first_run():
+        # 首次运行引导 — 强制配置模型
+        while self.model_manager.is_first_run():
             self.logger.info("配置", "首次运行，启动模型配置引导")
-            if not self.model_manager.setup_wizard():
-                self.logger.warn("配置", "用户未完成模型配置")
-                print("\n⚠️ 未配置模型，suri 将无法调用外部模型进行对话。")
-                print("可在之后使用 /model 命令添加模型。")
+            if self.model_manager.setup_wizard():
+                break
+            # 配置失败，询问是否重试
+            print("\n⚠️ 模型配置未完成，suri 无法调用外部模型。")
+            retry = input("是否重新配置? [Y/n]: ").strip().lower()
+            if retry == 'n':
+                print("\n您可以在之后使用 /model 命令添加模型。")
                 print("")
+                break
         
         roles_count = len(self.config.list_roles())
         self.logger.log_startup(roles_count)
