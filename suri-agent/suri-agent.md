@@ -466,6 +466,10 @@ group/<department>/<role_id>/
 | 2026-05-01 | 修复 model/manager.py API 响应防御性编程（KeyError/IndexError） | suri |
 | 2026-05-01 | 修复 ConfigService 未扫描 wiki/ 目录、创建 3 个缺失知识库文档 | suri |
 | 2026-05-01 | 补全缺失的 __init__.py（feishu、telegram、hooks） | suri |
+| 2026-05-01 | 简化首次运行模型配置：提供商选择菜单 | suri |
+| 2026-05-01 | 强制模型配置：无模型时程序不继续运行 | suri |
+| 2026-05-01 | 两级模型选择菜单（品牌 → 型号），GLM-4 为推荐 | suri |
+| 2026-05-01 | 模型自动降级：默认模型失败时自动切换备用模型 | suri |
 
 ---
 
