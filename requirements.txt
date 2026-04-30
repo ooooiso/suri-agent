@@ -1,0 +1,23 @@
+# Suri Agent 依赖
+
+# 配置解析
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# 通信（Telegram）
+# python-telegram-bot>=20.0
+# 或 aiogram>=3.0
+
+# 数据库
+# sqlite3（Python 标准库，无需安装）
+
+# 模型调用
+# openai>=1.0.0
+# anthropic>=0.20.0
+# httpx>=0.25.0
+
+# MCP（Model Context Protocol）
+# mcp>=1.0.0（未来集成）
+
+# 异步支持
+# asyncio（Python 标准库）

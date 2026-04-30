@@ -1,0 +1,52 @@
+---
+skill_id: user_approval
+name: 用户审批请求
+owner: suri
+version: "0.1.0"
+status: active
+---
+
+# 用户审批请求
+
+## 功能概述
+
+在安全审批流程中，suri 向用户发送结构化的批准请求，并等待用户明确回复（"是"）。处理超时与模糊回复。
+
+## 触发条件
+
+- security_admin 审核通过变更报告
+- 需要用户最终确认的配置/文件修改
+
+## 输入
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| report_id | string | 是 | 变更报告 ID |
+| requester | string | 是 | 请求角色 ID |
+| file_list | array | 是 | 待修改文件清单 |
+| reason | string | 是 | 变更原因 |
+| impact | string | 是 | 影响分析 |
+
+## 执行步骤
+
+1. **格式化消息**：按模板生成审批请求消息。
+2. **发送**：在中台调度群（`@shushi_central_group`）发送给用户。
+3. **等待回复**：监听用户回复，匹配 "是"/"否"/超时。
+4. **处理结果**：
+   - "是" → 回填 `approval_token`，通知请求者执行。
+   - "否" → 终止流程，通知请求者。
+   - 超时 24h → 自动终止，记录日志。
+
+## 输出
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| approval_id | string | 审批事件 ID |
+| result | string | approved / rejected / timeout |
+| approval_token | string | 审批通过令牌（仅 approved 时） |
+
+## 异常处理
+
+- 用户回复模糊（非"是"/"否"）：重新请求明确回复，最多 2 次。
+- 2 次模糊回复后仍未明确：视为"拒绝"，终止审批流程。
+- 用户超时 24 小时未回复：自动终止审批，向请求者发送终止通知（含原因：超时），记录到 `logs/approval.log`。
