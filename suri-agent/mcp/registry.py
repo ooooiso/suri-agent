@@ -22,6 +22,7 @@ class MCPRegistry:
     """
     
     def __init__(self, services_dir: Optional[Any] = None):
+        # services_dir 预留用于未来从目录自动加载服务
         self._services: Dict[str, BaseMCPService] = {}
         self._tools: Dict[str, MCPTool] = {}
         self._role_bindings: Dict[str, List[str]] = {}  # role_id -> [tool_id]
@@ -39,7 +40,6 @@ class MCPRegistry:
     def unregister(self, server_id: str) -> None:
         """注销 MCP 服务"""
         if server_id in self._services:
-            service = self._services[server_id]
             for tool_id in list(self._tools.keys()):
                 if self._tools[tool_id].server_id == server_id:
                     del self._tools[tool_id]

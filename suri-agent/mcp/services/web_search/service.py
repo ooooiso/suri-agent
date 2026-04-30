@@ -26,6 +26,7 @@ class WebSearchMCPService(BaseMCPService):
         return list(self._tools.values())
     
     def execute(self, tool_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        # params 预留用于未来传递搜索参数
         if tool_id == 'web_search':
             return {'success': True, 'results': [], 'note': '占位实现，待集成搜索引擎 API'}
         elif tool_id == 'web_fetch':

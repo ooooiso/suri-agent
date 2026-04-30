@@ -8,8 +8,7 @@
 - 变更日志记录
 """
 
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from process.base import BaseProcess
 
 
@@ -73,7 +72,6 @@ class ChangeApprovalProcess(BaseProcess):
     def _step_initiate(self, context: Dict) -> Dict:
         """Step 2: 所属角色发起"""
         operator = context.get("operator")
-        target_path = context.get("target_path")
         owner = context.get("owner")
         
         if operator == owner:
@@ -93,8 +91,6 @@ class ChangeApprovalProcess(BaseProcess):
     
     def _step_security_review(self, context: Dict) -> Dict:
         """Step 3: security_admin 审核"""
-        report = context.get("report", {})
-        
         checks = {
             "permission_check": "操作者是否有权限",
             "scope_clarity": "变更范围是否明确、无歧义",
@@ -170,7 +166,6 @@ class ChangeApprovalProcess(BaseProcess):
     
     def _step_emergency(self, context: Dict) -> Dict:
         """紧急修复通道"""
-        author = context.get("author")
         emergency_count = context.get("emergency_count", 0)
         
         result = {

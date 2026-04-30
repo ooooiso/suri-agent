@@ -8,7 +8,7 @@
 - 消息留存期限
 """
 
-from typing import Dict, List, Optional
+from typing import Dict
 from rules.base import BaseRule
 
 

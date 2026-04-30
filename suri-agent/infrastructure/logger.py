@@ -15,7 +15,6 @@
 - logs/system/    — 系统日志（启动、关闭、代码变更、重载）
 """
 
-import os
 import sys
 from pathlib import Path
 from datetime import datetime

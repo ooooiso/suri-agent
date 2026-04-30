@@ -8,10 +8,8 @@
 - 消息留存管理
 """
 
-import json
-import time
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
 
 class RoleMessenger:

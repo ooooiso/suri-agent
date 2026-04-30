@@ -11,7 +11,7 @@
 import re
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 from rules.base import BaseRule
 
 
@@ -52,7 +52,6 @@ class RoleManagementRule(BaseRule):
     def _execute_create(self, context: Dict) -> Dict:
         """执行角色创建"""
         role_id = context.get("role_id")
-        name = context.get("name")
         department = context.get("department")
         
         if not self.validate_role_id(role_id):

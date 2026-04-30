@@ -23,22 +23,25 @@ suri/                               # 项目根目录
 │
 │  【源代码/配置模板 — 程序运行前已存在】
 ├── requirements.txt                # Python 依赖清单（源代码）
-├── run.sh                          # 启动脚本（源代码）
-├── install.sh                      # 安装脚本（源代码）
-├── suri                            # 客户端命令（源代码）
-├── suri-daemon                     # 后台管理命令（源代码）
+├── suri                            # 客户端命令（源代码，终端唯一入口）
 ├── .env.example                    # 环境变量模板（配置模板）
-├── state_schema.md                 # 数据库表结构说明文档
+│
+├── scripts/                        # 辅助脚本（源代码）
+│   ├── run.sh                      # 多模式启动脚本
+│   ├── install.sh                  # 系统安装脚本
+│   └── suri-daemon                 # 后台管理命令
+│
+├── wiki/                           # 知识库（用户面向，可编辑）
+│   ├── state_schema.md             # 数据库表结构说明文档
+│   ├── models/model_pool.md        # 模型池配置
+│   ├── communication/telegram.md   # 通信配置
+│   └── memory/memory_config.md     # 记忆策略配置
 │
 │  【运行时生成 — 程序运行后自动创建/修改】
 ├── .env                            # 环境变量（首次运行引导写入）
 ├── config.yaml                     # 运行时参数（首次运行写入，可热重载）
 ├── model_config.json               # 模型配置（/model add 写入）
 ├── .doc_sync_rule_state.json       # 文档同步规则状态（自动持久化）
-│
-│  【知识库 — 可编辑】
-├── wiki/                           # 知识库（用户面向，可编辑）
-│
 │
 │  【角色定义 — 源代码（运行前）+ 运行时记忆（运行后生成）】
 ├── group/                          # 角色组
@@ -456,6 +459,13 @@ group/<department>/<role_id>/
 | 2026-04-30 | 新增 LoggerService 日志服务 | suri |
 | 2026-04-30 | 新增 DocSyncRule 文档同步规则引擎 + DocWatcher 文件监控钩子 | suri |
 | 2026-04-30 | 建立"代码变更即文档更新"自动化闭环规则 | suri |
+| 2026-05-01 | 全面代码审查：修复 6 处致命错误（运行时必报错） | suri |
+| 2026-05-01 | 修复 20+ 处未使用导入、5 处未使用变量、移除重复定义 | suri |
+| 2026-05-01 | 修复 except Exception: pass 静默吞异常（添加日志输出） | suri |
+| 2026-05-01 | 修复非 TTY 环境 input() 阻塞（setup_wizard、doc_sync） | suri |
+| 2026-05-01 | 修复 model/manager.py API 响应防御性编程（KeyError/IndexError） | suri |
+| 2026-05-01 | 修复 ConfigService 未扫描 wiki/ 目录、创建 3 个缺失知识库文档 | suri |
+| 2026-05-01 | 补全缺失的 __init__.py（feishu、telegram、hooks） | suri |
 
 ---
 

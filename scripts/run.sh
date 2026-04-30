@@ -8,7 +8,7 @@ echo "  Suri 智能体平台启动器"
 echo "========================================"
 echo ""
 
-PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 # 检查 Python

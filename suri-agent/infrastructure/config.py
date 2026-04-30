@@ -48,7 +48,7 @@ class ConfigService:
     
     def load_all(self) -> None:
         """加载所有外部配置到内存"""
-        dirs = ["group", "skills", "suri-agent/tools"]
+        dirs = ["group", "skills", "suri-agent/tools", "wiki"]
         for dirname in dirs:
             path = self.project_root / dirname
             if not path.exists():

@@ -12,12 +12,10 @@
 - 去重：同一目录的多次变更只记录一次
 """
 
-import os
 import time
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Callable
-from datetime import datetime
 
 
 class DocWatcher:
@@ -58,7 +56,8 @@ class DocWatcher:
                 ):
                     try:
                         snapshot[str(f.relative_to(self.project_root))] = f.stat().st_mtime
-                    except Exception:
+                    except Exception as e:
+                        print(f"[DocWatcher] 无法获取文件状态: {e}")
                         pass
         return snapshot
     
@@ -101,7 +100,8 @@ class DocWatcher:
                 
                 if changed and self.callback:
                     self.callback(changed)
-            except Exception:
+            except Exception as e:
+                print(f"[DocWatcher] 回调执行失败: {e}")
                 pass
     
     def start(self, interval: float = 2.0) -> None:

@@ -127,7 +127,8 @@ class JSONRPCHandler(BaseHTTPRequestHandler):
                 loop = asyncio.new_event_loop()
                 intercept = loop.run_until_complete(self.middleware.run_before(request))
                 loop.close()
-            except Exception:
+            except Exception as e:
+                print(f"[Server] 中间件 before 处理失败: {e}")
                 pass
             
             if intercept:
@@ -144,7 +145,8 @@ class JSONRPCHandler(BaseHTTPRequestHandler):
                 loop = asyncio.new_event_loop()
                 response = loop.run_until_complete(self.middleware.run_after(request, response))
                 loop.close()
-            except Exception:
+            except Exception as e:
+                print(f"[Server] 中间件 before 处理失败: {e}")
                 pass
         
         self._send_json(response, 200)

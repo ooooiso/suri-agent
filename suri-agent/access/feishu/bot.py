@@ -9,7 +9,8 @@
 """
 
 from typing import Dict, Any, Optional
-from .base_comm import BaseCommAdapter, StandardMessage
+from ..base import BaseCommAdapter
+from ..telegram.bot import StandardMessage
 
 
 class FeishuAdapter(BaseCommAdapter):

@@ -11,7 +11,7 @@
 
 import sqlite3
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
@@ -203,6 +203,52 @@ class MemoryService:
              'retry_count': r[8]}
             for r in rows
         ]
+    
+    def get_task(self, role_id: str, task_id: str) -> Optional[Dict[str, Any]]:
+        """获取指定角色的指定任务"""
+        db_path = self._get_role_db(role_id)
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM tasks WHERE task_id = ?', (task_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                'task_id': row[0], 'session_id': row[1], 'requester_role': row[2],
+                'target_department': row[3], 'target_director': row[4],
+                'status': row[5], 'created_at': row[6], 'updated_at': row[7],
+                'retry_count': row[8]
+            }
+        return None
+    
+    def get_task_messages(self, role_id: str, task_id: str) -> List[Dict[str, Any]]:
+        """获取指定任务的所有消息"""
+        db_path = self._get_role_db(role_id)
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM messages WHERE task_id = ? ORDER BY timestamp', (task_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        result = []
+        for r in rows:
+            try:
+                body = json.loads(r[4])
+            except json.JSONDecodeError:
+                body = {}
+            result.append({
+                'message_id': r[0], 'task_id': r[1], 'sender_role': r[2],
+                'receiver_role': r[3], 'body': body, 'timestamp': r[5]
+            })
+        return result
+    
+    def increment_retry(self, role_id: str, task_id: str) -> None:
+        """增加任务重试次数"""
+        db_path = self._get_role_db(role_id)
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute('UPDATE tasks SET retry_count = retry_count + 1 WHERE task_id = ?', (task_id,))
+        conn.commit()
+        conn.close()
     
     # ---- 消息管理（角色级） ----
     

@@ -9,7 +9,6 @@
 原则：调用方无需关心具体模型端点，只需指定模型类型。
 """
 
-import os
 import time
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
@@ -120,6 +119,8 @@ class ModelService:
     def _do_call(self, model: ModelConfig, prompt: str, timeout: int) -> Dict[str, Any]:
         """
         实际调用模型（占位实现）
+        
+        参数 timeout 预留用于未来设置请求超时。
         
         实际集成时，此处应调用对应的 API 客户端：
         - OpenAI API

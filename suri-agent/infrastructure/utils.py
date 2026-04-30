@@ -2,7 +2,6 @@
 通用工具函数
 """
 
-import re
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Tuple, Optional

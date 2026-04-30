@@ -9,7 +9,7 @@
 原则：只读取外部配置，不内嵌业务逻辑。
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from infrastructure.config import ConfigService
 from infrastructure.memory import MemoryService
 
@@ -102,7 +102,8 @@ class ContextService:
             entry = self.config.get_file(f'profiles/{role_id}/reference/files_i_use.md')
             if entry:
                 return entry.body[:2000]  # 限制长度，避免提示过长
-        except Exception:
+        except Exception as e:
+            print(f"[Context] 获取上下文失败: {e}")
             pass
         return ""
     
@@ -116,7 +117,8 @@ class ContextService:
             try:
                 content = self.memory.read_role_memory(role_id, mem_path)
                 memories.append(f"- [{mem_path}]\n{content[:500]}")
-            except Exception:
+            except Exception as e:
+                print(f"[Context] 读取角色记忆失败: {e}")
                 continue
         
         # 读取相关任务历史消息

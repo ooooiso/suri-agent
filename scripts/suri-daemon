@@ -12,7 +12,7 @@ if [ -L "$SCRIPT_PATH" ]; then
     SCRIPT_PATH="$LINK_TARGET"
 fi
 
-PROJECT_ROOT="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 export PYTHONPATH="$PROJECT_ROOT/suri-agent:$PYTHONPATH"
 
 cd "$PROJECT_ROOT/suri-agent"

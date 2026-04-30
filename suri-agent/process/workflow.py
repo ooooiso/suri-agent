@@ -11,7 +11,7 @@
 - 自优化上报
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from process.base import BaseProcess
 
 

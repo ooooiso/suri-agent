@@ -8,7 +8,6 @@
 - CORS 支持（如果 TUI 前端通过 Web 加载）
 """
 
-import json
 import traceback
 from typing import Dict, Any, Callable, Optional
 from functools import wraps

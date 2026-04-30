@@ -10,8 +10,6 @@
 原则：工具本身是外部内容，主程序只提供加载和执行能力。
 """
 
-import json
-import importlib.util
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from infrastructure.config import ConfigService
@@ -116,6 +114,7 @@ class ToolService:
         校验工具参数
         
         根据 tool.md 中定义的参数表进行校验。
+        参数 params 预留用于未来扩展参数校验逻辑。
         """
         info = self.get_tool_info(tool_id)
         if not info:

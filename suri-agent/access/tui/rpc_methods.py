@@ -12,7 +12,6 @@ RPC 方法集合
 - 异步方法统一返回 dict 或 awaitable dict
 """
 
-import json
 import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -190,7 +189,8 @@ class RPCHandler:
                     'preview': content[:500],
                     'size': len(content),
                 })
-            except Exception:
+            except Exception as e:
+                print(f"[RPC] 读取文件失败: {e}")
                 continue
         return result
     
@@ -226,6 +226,7 @@ class RPCHandler:
         # 当前仅记录到数据库
         msg_id = f"ui_msg_{int(time.time())}"
         self.memory.save_message(
+            'suri',
             message_id=msg_id,
             task_id='',
             sender='user',

@@ -16,7 +16,7 @@
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 from dataclasses import dataclass, asdict
 
 
@@ -61,7 +61,8 @@ class DocSyncRule:
         if self.state_path.exists():
             try:
                 return json.loads(self.state_path.read_text(encoding="utf-8"))
-            except Exception:
+            except Exception as e:
+                print(f"[DocSyncRule] 加载状态失败: {e}")
                 pass
         return {"last_scan": "", "violations": []}
     

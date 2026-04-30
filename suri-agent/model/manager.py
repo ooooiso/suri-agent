@@ -8,7 +8,6 @@
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
@@ -60,6 +59,12 @@ class ModelManager:
         首次启动引导配置
         返回是否配置成功
         """
+        import sys
+        if not sys.stdin.isatty():
+            print("[ModelManager] 非交互环境，跳过模型配置引导")
+            print("[ModelManager] 请手动创建 model_config.json 或使用 /model add 命令")
+            return False
+        
         print("")
         print("=" * 50)
         print("  首次启动 — 模型配置")
@@ -210,7 +215,7 @@ class ModelManager:
             return None
         
         # 根据提供商调用对应 API
-        if model.provider in ["openai", "moonshot", "deepseek"]:
+        if model.provider in ["openai", "moonshot", "deepseek", "glm"]:
             return self._call_openai_compatible(model, messages)
         elif model.provider == "anthropic":
             return self._call_anthropic(model, messages)
@@ -244,7 +249,10 @@ class ModelManager:
             
             with urllib.request.urlopen(req, timeout=30) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
-                return result["choices"][0]["message"]["content"]
+                choices = result.get("choices", [{}])
+                if choices and isinstance(choices, list):
+                    return choices[0].get("message", {}).get("content")
+                return None
                 
         except Exception as e:
             print(f"[ModelManager] API 调用失败: {e}")
@@ -276,7 +284,10 @@ class ModelManager:
             
             with urllib.request.urlopen(req, timeout=30) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
-                return result["content"][0]["text"]
+                content = result.get("content", [{}])
+                if content and isinstance(content, list):
+                    return content[0].get("text")
+                return None
                 
         except Exception as e:
             print(f"[ModelManager] Anthropic API 调用失败: {e}")

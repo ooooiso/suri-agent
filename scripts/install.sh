@@ -4,7 +4,7 @@
 
 set -e
 
-PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "========================================"
 echo "  Suri Agent 安装器"
@@ -50,7 +50,7 @@ DAEMON_TARGET="$INSTALL_DIR/suri-daemon"
 if [ -L "$DAEMON_TARGET" ] || [ -f "$DAEMON_TARGET" ]; then
     rm -f "$DAEMON_TARGET"
 fi
-ln -s "$PROJECT_ROOT/suri-daemon" "$DAEMON_TARGET"
+ln -s "$PROJECT_ROOT/scripts/suri-daemon" "$DAEMON_TARGET"
 
 echo ""
 echo "✅ 安装完成！"

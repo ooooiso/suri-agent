@@ -79,12 +79,13 @@ class TaskService:
         2. 分析需求，匹配部门
         3. 生成结构化消息，下发给总监
         """
-        task = self.memory.get_task(task_id)
+        # 任务存储在 suri 的 role.db 中
+        task = self.memory.get_task('suri', task_id)
         if not task:
             return {'success': False, 'error': '任务不存在'}
         
         # 获取用户原始需求
-        messages = self.memory.get_task_messages(task_id)
+        messages = self.memory.get_task_messages('suri', task_id)
         raw_input = messages[0]['body']['content'] if messages else ''
         
         # 读取 function_index
@@ -101,8 +102,8 @@ class TaskService:
         if not target_dept:
             return {'success': False, 'error': '无法匹配责任部门'}
         
-        # 更新任务
-        self.memory.update_task_status(task_id, 'in_progress')
+        # 更新任务（在 suri 的 role.db 中）
+        self.memory.update_task_status('suri', task_id, 'in_progress')
         
         # TODO: 更新数据库中的 target_department 和 target_director
         
@@ -174,7 +175,7 @@ class TaskService:
         1. 增加重试计数
         2. 若超过 3 次，回流用户
         """
-        retry = self.memory.increment_retry(task_id)
+        retry = self.memory.increment_retry('suri', task_id)
         
         if retry >= 3:
             self.memory.update_task_status(task_id, 'failed')

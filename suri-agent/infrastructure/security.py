@@ -10,7 +10,7 @@
 """
 
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from infrastructure.config import ConfigService
 from rules.file_ownership import FileOwnershipRule
 from rules.security import SecurityRule

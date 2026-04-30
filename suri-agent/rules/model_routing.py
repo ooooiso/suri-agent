@@ -7,7 +7,7 @@
 - 连续降级告警
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from rules.base import BaseRule
 
 

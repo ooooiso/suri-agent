@@ -13,7 +13,6 @@
     doc_sync.run_sync()
 """
 
-import os
 import json
 from pathlib import Path
 from datetime import datetime
@@ -36,7 +35,8 @@ class DocSyncService:
         if self.tracking_file.exists():
             try:
                 self.state = json.loads(self.tracking_file.read_text(encoding="utf-8"))
-            except Exception:
+            except Exception as e:
+                print(f"[DocSync] 加载状态文件失败: {e}")
                 self.state = {}
     
     def _save_state(self) -> None:
@@ -56,7 +56,8 @@ class DocSyncService:
                     if f.is_file() and not f.name.endswith(".db") and ".pyc" not in f.suffix:
                         try:
                             snapshots[str(f.relative_to(self.project_root))] = f.stat().st_mtime
-                        except Exception:
+                        except Exception as e:
+                            print(f"[DocSync] 无法获取文件状态: {e}")
                             pass
         return snapshots
     
@@ -151,6 +152,12 @@ AI 开发记忆库包含以下文件：
     
     def prompt_user_approval(self, report: Dict) -> bool:
         """向用户汇报审核结果，请求确认"""
+        import sys
+        # 非交互环境自动跳过，避免阻塞
+        if not sys.stdin.isatty():
+            print("[DocSync] 非交互环境，跳过文档更新确认")
+            return False
+        
         print("\n" + "=" * 50)
         print("  [document-review] 文档更新审核报告")
         print("=" * 50)
@@ -209,11 +216,6 @@ AI 开发记忆库包含以下文件：
             idx_path = self.core_memory_dir / "module-index.md"
             if idx_path.exists():
                 content = idx_path.read_text(encoding="utf-8")
-                for u in report["module_index_updates"]:
-                    path_str = u.get("path", "")
-                    change_str = u.get("latest_change", "")
-                    # 简单替换：找到对应行，更新 latest_change 列
-                    # 实际应用中可以做得更精细
                 # 简化处理：追加更新记录到文件末尾
                 content += f"\n\n## 更新记录 ({now})\n\n"
                 for u in report["module_index_updates"]:

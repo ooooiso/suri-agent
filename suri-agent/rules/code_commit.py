@@ -8,7 +8,7 @@
 """
 
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List
 from rules.base import BaseRule
 
 

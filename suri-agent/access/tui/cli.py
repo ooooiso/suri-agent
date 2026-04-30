@@ -11,7 +11,6 @@ Suri 终端客户端
 """
 
 import sys
-import uuid
 import readline  # 改善终端输入体验（支持中文退格删除、光标移动）
 from pathlib import Path
 from datetime import datetime
@@ -28,11 +27,10 @@ from infrastructure.logger import LoggerService
 from core.context import ContextService
 from core.model_router import ModelService
 from core.task_dispatcher import TaskService
-from core.approval import ApprovalService
-from core.tool_executor import ToolService
-from mcp.registry import MCPRegistry
 from model.manager import ModelManager
 from core.doc_sync import DocSyncService
+from rules.doc_sync_rule import DocSyncRule
+from hooks.doc_watcher import DocWatcher
 
 
 class SuriTerminal:
@@ -80,7 +78,9 @@ class SuriTerminal:
         self.filesystem = FileService(self.project_root, self.security)
         self.model = ModelService(self.config)
         self.context = ContextService(self.config, self.memory)
-        self.task = TaskService(self.config, self.memory, self.context, self.model, self.logger)
+        # TaskService 需要 CommService 作为第5个参数，cli 模式下暂不连接 Telegram
+        # 传 None 作为 comm，logger 作为第6个参数
+        self.task = TaskService(self.config, self.memory, self.context, self.model, None, self.logger)
         
         # 模型管理器
         self.model_manager = ModelManager(self.project_root)
@@ -382,6 +382,8 @@ class SuriTerminal:
         """
         suri 角色处理流程
         
+        前置条件：调用方已确认 default_model 存在。
+        
         suri 是 central 部门负责人，也是所有部门的中枢。
         职责：
         1. 接收用户需求
@@ -495,7 +497,8 @@ class SuriTerminal:
         for f in agent_dir.rglob("*.py"):
             try:
                 mtime_sum += f.stat().st_mtime
-            except Exception:
+            except Exception as e:
+                print(f"[CLI] 无法读取文件状态: {e}")
                 pass
         return f"{mtime_sum:.6f}"
     

@@ -11,19 +11,8 @@
 
 import os
 from typing import Dict, Any, Optional, Callable
-from dataclasses import dataclass
 from infrastructure.config import ConfigService
-
-
-@dataclass
-class StandardMessage:
-    message_id: str
-    sender_role: str
-    receiver_role: str
-    timestamp: str
-    priority: str
-    task_ref: str
-    body: Dict[str, Any]
+from access.base import StandardMessage
 
 
 class CommService:
