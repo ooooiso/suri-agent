@@ -19,7 +19,7 @@ fi
 
 # 显示菜单
 echo "请选择启动模式:"
-echo "  1) 启动主程序 (suri_agent)"
+echo "  1) 启动主程序 (suri-agent)"
 echo "  2) 启动 TUI 后端 (JSON-RPC)"
 echo "  3) 启动终端客户端 (命令行交互)"
 echo "  4) 启动全部"
@@ -29,29 +29,29 @@ read -p "输入选项 [1-4]: " choice
 case $choice in
     1)
         echo ""
-        echo ">>> 启动 suri_agent 主程序..."
-        python3 -m suri_agent.main
+        echo ">>> 启动 suri-agent 主程序..."
+        PYTHONPATH="$PROJECT_ROOT/suri-agent:$PYTHONPATH" python3 -m suri_agent.main
         ;;
     2)
         echo ""
         echo ">>> 启动 TUI JSON-RPC 后端..."
-        python3 -m suri_agent.access.tui.server --port 8080
+        PYTHONPATH="$PROJECT_ROOT/suri-agent:$PYTHONPATH" python3 -m suri_agent.access.tui.server --port 8080
         ;;
     3)
         echo ""
         echo ">>> 启动终端客户端..."
-        python3 "$PROJECT_ROOT/suri_agent/access/tui/cli.py"
+        PYTHONPATH="$PROJECT_ROOT/suri-agent:$PYTHONPATH" python3 "$PROJECT_ROOT/suri-agent/access/tui/cli.py"
         ;;
     4)
         echo ""
         echo ">>> 启动 TUI 后端 (后台)..."
-        python3 -m suri_agent.access.tui.server --port 8080 &
+        PYTHONPATH="$PROJECT_ROOT/suri-agent:$PYTHONPATH" python3 -m suri_agent.access.tui.server --port 8080 &
         TUI_PID=$!
         echo "TUI PID: $TUI_PID"
         sleep 2
         echo ""
         echo ">>> 启动终端客户端..."
-        python3 "$PROJECT_ROOT/suri_agent/access/tui/cli.py"
+        PYTHONPATH="$PROJECT_ROOT/suri-agent:$PYTHONPATH" python3 "$PROJECT_ROOT/suri-agent/access/tui/cli.py"
         kill $TUI_PID 2>/dev/null
         ;;
     *)
