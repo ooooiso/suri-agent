@@ -62,6 +62,16 @@ class SuriTerminal:
         self.logger = LoggerService(self.project_root)
         self.logger.info("系统", "开始初始化服务...")
         
+        # ==== 核心角色 suri 存在性检查（mandatory）====
+        suri_soul = self.project_root / "group" / "central" / "suri" / "suri.md"
+        if not suri_soul.exists():
+            print("\n❌ [致命错误] 找不到核心角色 suri")
+            print(f"   期望路径: {suri_soul}")
+            print("   suri 是 central 部门负责人，也是所有部门的中枢。")
+            print("   没有 suri，程序无法启动。\n")
+            self.logger.error("系统", "suri 角色 Soul 文件缺失，程序终止")
+            sys.exit(1)
+        
         self.config = ConfigService(self.project_root)
         self.config.load_all()
         
@@ -96,6 +106,7 @@ class SuriTerminal:
         roles_count = len(self.config.list_roles())
         self.logger.log_startup(roles_count)
         print(f"[就绪] 已加载 {roles_count} 个角色")
+        print(f"[就绪] 核心角色 suri (central 负责人) 已就绪")
         print("")
         
         # 记录代码快照
@@ -341,7 +352,12 @@ class SuriTerminal:
         return True
         
     async def handle_user_input(self, text: str):
-        """处理用户输入"""
+        """
+        处理用户输入
+        
+        终端(cli)是接入层，只负责接收输入和显示输出。
+        所有业务逻辑交给 suri 角色处理（suri_process）。
+        """
         if text.startswith('/'):
             return self.handle_command(text)
         
@@ -354,36 +370,121 @@ class SuriTerminal:
             print(f"  1. 重启程序，按引导配置（推荐）")
             print(f"  2. 输入 /model add 手动添加\n")
             return True
-            
+        
         # 记录用户输入
         self.logger.log_user_input(self.user_id, text)
         
-        # 创建任务
+        # 交给 suri 角色处理
+        await self.suri_process(text)
+        return True
+    
+    async def suri_process(self, text: str):
+        """
+        suri 角色处理流程
+        
+        suri 是 central 部门负责人，也是所有部门的中枢。
+        职责：
+        1. 接收用户需求
+        2. 调用模型分析需求
+        3. 判断：直接回复 或 派发任务给部门总监
+        4. 汇总结果返回用户
+        
+        调度链：
+        用户 → suri → 部门总监 → 成员 → 结果回流 suri → 用户
+        """
+        # 1. 创建任务（记录到 suri 的 role.db）
         task_id = self.task.receive_task(self.user_id, text)
         self.logger.log_task_created(task_id, self.user_id, text)
         print(f"\n[suri] 已接收任务 {task_id}")
         print(f"[suri] 正在分析需求: {text[:60]}...")
         
-        # 调用外部模型生成回复
-        self.logger.log_model_call(default_model.name, default_model.model_id, "开始")
+        # 2. suri 调用模型分析需求（这是 suri 角色的思考过程）
+        default_model = self.model_manager.get_default_model()
+        self.logger.log_model_call(default_model.name, default_model.model_id, "开始", "suri 分析需求")
+        
+        # 构建 suri 的系统提示（体现 suri 作为中枢调度助手的角色）
+        suri_system_prompt = (
+            "你是 Suri，central 部门的负责人，也是整个智能体平台的中枢。\n"
+            "你的职责：\n"
+            "1. 理解用户需求\n"
+            "2. 判断需求归属哪个部门\n"
+            "3. 如果需求可直接回答（闲聊、简单问题），直接给出清晰回复\n"
+            "4. 如果需求需要专业处理（开发、设计、运维等），说明应派发给哪个部门\n"
+            "\n"
+            "当前平台部门：\n"
+            "- central：中枢部门（你自己），负责调度、协调、汇总\n"
+            "- suri-hr：人力资源，负责角色管理、组织架构\n"
+            "- suri-dev：程序维护，负责平台技术问题\n"
+            "\n"
+            "请用简洁的中文回复。如果是闲聊，友好回应。如果是任务，说明应派发给哪个角色处理。"
+        )
+        
         messages = [
-            {"role": "system", "content": (
-                "你是 Suri，一个智能体平台的中枢调度助手。"
-                "你负责理解用户需求，分配任务给合适的角色，并给出清晰的回复。"
-                "当前平台有 suri（中枢）、suri-hr（人力资源）、suri-dev（开发）三个核心角色。"
-            )},
+            {"role": "system", "content": suri_system_prompt},
             {"role": "user", "content": text},
         ]
-        print(f"[suri] 正在调用模型 ({default_model.name}) 生成回复...")
+        
+        print(f"[suri] 正在调用模型 ({default_model.name}) 分析需求...")
         reply = self.model_manager.chat(messages)
-        if reply:
-            self.logger.log_model_call(default_model.name, default_model.model_id, "成功", f"回复长度={len(reply)}")
-            print(f"\n[suri] {reply}\n")
-        else:
+        
+        if not reply:
             self.logger.log_model_call_error(default_model.name, "API 返回空或无网络")
             print(f"\n[suri] 模型调用失败，请检查 API Key 和网络连接。\n")
+            return
         
-        return True
+        self.logger.log_model_call(default_model.name, default_model.model_id, "成功", f"回复长度={len(reply)}")
+        
+        # 3. suri 输出分析结果
+        print(f"\n[suri] {reply}\n")
+        
+        # 4. 如果 suri 判断需要派发任务，执行调度
+        # 简单启发式：如果回复中提到"派发给"、"交给"、"调度给"等关键词，则创建调度记录
+        dispatch_keywords = ['派发', '交给', '调度', '分配给', '转给', 'suri-hr', 'suri-dev']
+        should_dispatch = any(kw in reply for kw in dispatch_keywords)
+        
+        if should_dispatch:
+            # 尝试匹配部门并记录调度
+            self._attempt_dispatch(task_id, text, reply)
+        
+        # 5. 任务完成，记录到 suri 的记忆
+        self.logger.log_task_dispatched(task_id, 'suri', 'user', 'central')
+    
+    def _attempt_dispatch(self, task_id: str, text: str, suri_reply: str):
+        """
+        尝试根据 suri 的分析结果进行部门匹配和调度记录
+        
+        这是初期调度的简化实现：
+        - 读取 group_function.md 中的部门关键词
+        - 匹配后记录调度意图（实际下发由后续完整调度链实现）
+        """
+        func_index = self.config.get_function_index()
+        if not func_index or 'departments' not in func_index.meta:
+            return
+        
+        # 简单关键词匹配（和 suri_reply 内容一起判断）
+        combined_text = (text + suri_reply).lower()
+        
+        keywords = {
+            'suri-hr': ['角色', '人事', '组织', '创建角色', '注销', '招聘', '部门'],
+            'suri-dev': ['bug', '报错', '升级', '性能', '框架', '代码', '技术'],
+        }
+        
+        matched = None
+        for role_id, kws in keywords.items():
+            for kw in kws:
+                if kw in combined_text:
+                    matched = role_id
+                    break
+            if matched:
+                break
+        
+        if matched:
+            print(f"[suri] 调度意图：将任务派发给 [{matched}]")
+            self.logger.schedule("信息", "调度", f"任务 {task_id} 调度意图: {matched}")
+            print(f"  → 任务已记录，等待 {matched} 处理")
+            print(f"  → 如遇问题将通过异常回流机制返回给 suri，最终呈现给用户")
+        else:
+            print(f"[suri] 未匹配到具体部门，由 suri 继续处理或等待用户补充信息")
         
     def _compute_code_snapshot(self) -> str:
         """计算 suri-agent/ 下所有 .py 文件的修改时间哈希，用于检测代码变更"""

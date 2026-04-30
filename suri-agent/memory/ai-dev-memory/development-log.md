@@ -58,6 +58,30 @@
 - [ ] 大模型辅助生成 development-log 更新摘要时更精确地定位插入位置
 - [ ] 考虑在退出 cli 时自动提示是否执行 /sync
 
+### 架构重构：四大模块分离与 suri 角色核心地位
+
+**变更内容**:
+- `cli.py` 架构重构：
+  - `initialize()` 新增 suri 角色 mandatory 检查：`group/central/suri/suri.md` 不存在则程序直接退出
+  - `handle_user_input()` 不再直接调用模型，只负责"接收输入 → 交给 suri → 显示结果"
+  - 新增 `suri_process()`：代表 suri 角色的完整处理流程
+    - 调用模型分析需求（suri 的系统提示体现其中枢调度角色定位）
+    - 判断直接回复 or 派发任务
+    - 关键词启发式检测调度意图
+  - 新增 `_attempt_dispatch()`：根据 suri 分析结果匹配部门，记录调度意图
+- `suri-agent.md` 架构文档更新：
+  - 新增"四大模块分离"表：主程序/角色/知识库/资源库
+  - suri 角色标注 **mandatory**，其他角色标注可选
+  - 明确调度链：用户 → suri → 部门总监 → 成员 → 结果回流 suri → 用户
+  - 明确接入层（cli.py）只负责接收和显示，不处理业务逻辑
+
+**架构原则**:
+- 终端(cli)默认连接 suri 角色，suri 是唯一用户交互入口
+- suri 是 central 部门负责人，也是所有部门的中枢
+- 其他角色（suri-hr、suri-dev、document-review）可删除，不影响终端对话
+- 任何角色无法解决的问题最终回流到 suri，由 suri 返回给用户决策
+- 模型调用在 suri 处理流程中，不在 cli.py 接入层
+
 ### 根目录文件梳理：源代码 vs 运行时生成
 
 **变更内容**:
