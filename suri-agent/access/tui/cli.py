@@ -95,14 +95,20 @@ class SuriTerminal:
         self.doc_watcher = DocWatcher(self.project_root)
         
         # 首次运行引导 — 强制配置模型（无模型无法工作）
-        while self.model_manager.is_first_run():
-            self.logger.info("配置", "首次运行，启动模型配置引导")
-            if self.model_manager.setup_wizard():
-                break
-            # 配置失败，强制重试（无模型无法工作）
-            print("\n⚠️ 模型配置未完成，suri 无法调用外部模型。")
-            print("   您必须配置至少一个模型才能继续使用。")
-            print("")
+        if self.model_manager.is_first_run():
+            import sys as _sys
+            if not _sys.stdin.isatty():
+                print("\n⚠️ 首次运行且非交互环境，无法自动配置模型。")
+                print("   请手动运行 ./suri 在终端中配置，或使用 /model add 命令。")
+                print("")
+            else:
+                while self.model_manager.is_first_run():
+                    self.logger.info("配置", "首次运行，启动模型配置引导")
+                    if self.model_manager.setup_wizard():
+                        break
+                    print("\n⚠️ 模型配置未完成，suri 无法调用外部模型。")
+                    print("   您必须配置至少一个模型才能继续使用。")
+                    print("")
         
         roles_count = len(self.config.list_roles())
         self.logger.log_startup(roles_count)
