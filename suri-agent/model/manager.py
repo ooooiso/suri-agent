@@ -40,7 +40,7 @@ MODEL_MENU = {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "models": {
             "1": ("GLM-4", "glm-4"),
-            "2": ("GLM-4.7 (免费)", "glm-4.7"),
+            "2": ("GLM-4.7-Flash (免费)", "glm-4.7-flash"),
             "3": ("GLM-4V", "glm-4v"),
             "4": ("GLM-4-Flash", "glm-4-flash"),
         }
