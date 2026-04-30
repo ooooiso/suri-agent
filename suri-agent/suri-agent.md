@@ -470,6 +470,10 @@ group/<department>/<role_id>/
 | 2026-05-01 | 强制模型配置：无模型时程序不继续运行 | suri |
 | 2026-05-01 | 两级模型选择菜单（品牌 → 型号），GLM-4 为推荐 | suri |
 | 2026-05-01 | 模型自动降级：默认模型失败时自动切换备用模型 | suri |
+| 2026-05-01 | 模型调用层升级：httpx + tenacity 重试 + SSE 流式输出 | suri |
+| 2026-05-01 | 主循环跑通：asyncio.Queue 消息队列 + 消费者/生产者/超时检查 | suri |
+| 2026-05-01 | 补单元测试：test_model_manager（14 项）+ test_task_dispatcher（10 项）| suri |
+| 2026-05-01 | 调度智能化：三级部门匹配（关键词 → LLM 分类 → central 兜底）| suri |
 
 ---
 

@@ -428,7 +428,7 @@ class SuriTerminal:
         ]
         
         print(f"[suri] 正在调用模型 ({default_model.name}) 分析需求...")
-        reply = self.model_manager.chat(messages)
+        reply = await self.model_manager.chat(messages)
         
         if not reply:
             self.logger.log_model_call_error(default_model.name, "API 返回空或无网络")
@@ -534,10 +534,13 @@ class SuriTerminal:
             except EOFError:
                 break
         
-        # 退出时停止文档监控
+        # 退出时清理资源
         if self.doc_watcher:
             self.doc_watcher.stop()
             self.logger.info("系统", "文档监控已停止")
+        if self.model_manager:
+            import asyncio
+            asyncio.get_event_loop().run_until_complete(self.model_manager.close())
 
 
 async def main():

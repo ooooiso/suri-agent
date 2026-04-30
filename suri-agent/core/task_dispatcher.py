@@ -117,7 +117,7 @@ class TaskService:
         
         # 调用模型生成分派消息
         prompt = f"{suri_context}\n\n请根据以上信息，生成发给 {target_director} 的结构化任务消息。"
-        model_result = self.model.call_model(prompt, model_type='chat')
+        model_result = await self.model.call_model(prompt, model_type='chat')
         
         # 发送给总监
         msg = StandardMessage(
@@ -144,29 +144,57 @@ class TaskService:
         """
         匹配责任部门
         
-        TODO: 实现更智能的匹配（关键词/模型分类）
-        当前简化返回第一个部门。
+        三级策略：
+        1. 关键词精确匹配（O(1) 快速路径）
+        2. 模型辅助分类（LLM 语义理解，当关键词未命中时触发）
+        3. Fallback 回 central（中枢部门兜底，避免乱派）
         """
-        # 简单关键词匹配示例
+        if not departments:
+            return None, None
+
+        # === 第一级：关键词精确匹配 ===
         keywords = {
-            'design': ['设计', '图像', '视频', '美术', '视觉', '画图'],
-            'engineering': ['开发', '代码', '程序', '脚本', '后台', '部署'],
-            'ops': ['运维', '安全', '配置', '流程', 'Git', '监控'],
-            'resource': ['资源', '文件', '存储', '归档', '清理'],
-            'hr': ['角色', '人事', '组织', '创建角色', '注销'],
+            'design': ['设计', '图像', '视频', '美术', '视觉', '画图', 'UI', 'UX', '配色', '排版', '渲染'],
+            'engineering': ['开发', '代码', '程序', '脚本', '后台', '部署', 'API', '数据库', 'bug', '修复', '重构', '架构'],
+            'ops': ['运维', '安全', '配置', '流程', 'Git', '监控', '日志', '备份', '容灾', '权限', '审计'],
+            'resource': ['资源', '文件', '存储', '归档', '清理', '缓存', 'CDN', '压缩', '迁移'],
+            'hr': ['角色', '人事', '组织', '创建角色', '注销', '招聘', '离职', '权限分配', '组织架构'],
+            'central': ['调度', '协调', '汇总', 'suri', '中枢', '平台', '总览', '状态'],
         }
-        
+
         for dept in departments:
             dept_id = dept.get('id', '')
             for kw in keywords.get(dept_id, []):
                 if kw in raw_input:
                     return dept_id, dept.get('lead_role')
-        
-        # 默认返回设计部（或第一个可用部门）
-        if departments:
-            return departments[0].get('id'), departments[0].get('lead_role')
-        
-        return None, None
+
+        # === 第二级：模型辅助分类 ===
+        # 当关键词未命中时，使用 LLM 做语义分类（如果模型可用）
+        try:
+            dept_list = ', '.join([d.get('id', '') for d in departments])
+            prompt = (
+                f"用户需求：'{raw_input}'\n"
+                f"可选部门：{dept_list}\n"
+                f"请判断该需求应分配给哪个部门，只返回部门 ID，不要解释。"
+            )
+            model_result = await self.model.call_model(prompt, model_type='chat')
+            if model_result and model_result.get('success'):
+                predicted = model_result.get('content', '').strip().lower()
+                for dept in departments:
+                    dept_id = dept.get('id', '')
+                    if dept_id in predicted:
+                        return dept_id, dept.get('lead_role')
+        except Exception:
+            pass  # 模型分类失败，继续 fallback
+
+        # === 第三级：Fallback 回 central（中枢部门兜底）===
+        # 避免乱派到不相关的部门，central 负责进一步询问用户或人工分配
+        for dept in departments:
+            if dept.get('id') == 'central':
+                return 'central', dept.get('lead_role')
+
+        # 如果连 central 都没有，返回第一个（兜底兜底）
+        return departments[0].get('id'), departments[0].get('lead_role')
     
     async def handle_escalation(self, task_id: str, error_info: str) -> Dict[str, Any]:
         """

@@ -7,17 +7,30 @@
 - 首次启动引导配置（两级菜单：品牌 → 型号）
 - 模型自动降级切换
 
-模型切换规则：
-- 默认模型调用失败时，自动按优先级尝试其他已配置模型
-- 用户可通过 /model 命令管理模型池和切换规则
+调用层特性：
+- httpx 异步客户端（连接池复用）
+- tenacity 自动重试（指数退避）
+- SSE 流式输出支持
+- 结构化错误信息
 """
 
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, AsyncIterator
 from dataclasses import dataclass, asdict
 
+import httpx
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+)
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ========== 两级模型菜单定义 ==========
 MODEL_MENU = {
@@ -76,28 +89,42 @@ MODEL_MENU = {
 @dataclass
 class ModelConfig:
     """单个模型配置"""
-    name: str           # 模型显示名称
-    model_id: str       # 模型标识（如 gpt-4o、claude-3-5-sonnet）
-    api_key: str        # API Key
-    base_url: str       # API 端点
-    provider: str       # 提供商（openai、anthropic、moonshot 等）
+    name: str
+    model_id: str
+    api_key: str
+    base_url: str
+    provider: str
     is_default: bool = False
-    priority: int = 0   # 优先级，数字越小优先级越高（用于自动降级）
+    priority: int = 0
 
 
 class ModelManager:
     """模型管理器"""
-    
+
     CONFIG_FILE = "model_config.json"
-    
+
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.config_path = project_root / self.CONFIG_FILE
         self._models: Dict[str, ModelConfig] = {}
         self._load()
-    
+        # 复用连接池的异步 HTTP 客户端
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=5.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+
+    async def close(self):
+        """关闭 HTTP 客户端"""
+        await self._client.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
     def _load(self) -> None:
-        """加载模型配置"""
         if self.config_path.exists():
             try:
                 data = json.loads(self.config_path.read_text(encoding="utf-8"))
@@ -105,26 +132,23 @@ class ModelManager:
                     self._models[key] = ModelConfig(**val)
             except Exception as e:
                 print(f"[ModelManager] 加载配置失败: {e}")
-    
+
     def _save(self) -> None:
-        """保存模型配置"""
         data = {k: asdict(v) for k, v in self._models.items()}
-        self.config_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    
+        self.config_path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
     def is_first_run(self) -> bool:
-        """检查是否首次运行（无模型配置）"""
         return len(self._models) == 0
-    
+
+    # ========== 首次运行引导 ==========
+
     def setup_wizard(self) -> bool:
-        """
-        首次启动引导配置（两级菜单：品牌 → 型号）
-        返回是否配置成功
-        """
         if not sys.stdin.isatty():
             print("[ModelManager] 非交互环境，跳过模型配置引导")
-            print("[ModelManager] 请手动创建 model_config.json 或使用 /model add 命令")
             return False
-        
+
         print("")
         print("=" * 50)
         print("  欢迎使用 Suri 智能体平台")
@@ -137,129 +161,103 @@ class ModelManager:
             print(f"  {key}) {info['brand']}{marker}")
         print("  6) 自定义")
         print("")
-        
+
         brand_choice = input("输入选项 [1-6]: ").strip()
-        
-        # 自定义品牌
         if brand_choice == "6":
             return self._setup_custom()
-        
+
         brand_info = MODEL_MENU.get(brand_choice)
         if not brand_info:
             print("\n❌ 无效选项")
             return False
-        
-        # 第二级：选择型号
+
         print("")
         print(f"请选择 {brand_info['brand']} 型号：")
         print("")
         for key, (name, model_id) in brand_info["models"].items():
             print(f"  {key}) {name}")
         print("")
-        
+
         model_choice = input("输入选项: ").strip()
         model_entry = brand_info["models"].get(model_choice)
         if not model_entry:
             print("\n❌ 无效选项")
             return False
-        
+
         name, model_id = model_entry
-        provider_name = brand_info["provider"]
+        provider = brand_info["provider"]
         base_url = brand_info["base_url"]
-        
+
         print(f"\n请输入您的 {name} API Key：")
         api_key = input("API Key: ").strip()
-        
         if not api_key:
             print("\n❌ API Key 不能为空")
             return False
-        
-        self._persist_config(name, model_id, api_key, base_url, provider_name)
-        
+
+        self._persist_config(name, model_id, api_key, base_url, provider)
         print("\n✅ 模型配置完成！")
         print(f"   模型: {name} ({model_id})")
-        print(f"   提供商: {provider_name}")
+        print(f"   提供商: {provider}")
         print("")
         return True
-    
+
     def _setup_custom(self) -> bool:
-        """自定义模型配置"""
         print("")
         print("自定义模型配置：")
         name = input("显示名称: ").strip()
         model_id = input("模型 ID: ").strip()
         base_url = input("API 端点: ").strip()
-        provider_name = input("提供商名称: ").strip() or "custom"
+        provider = input("提供商名称: ").strip() or "custom"
         api_key = input("API Key: ").strip()
-        
         if not all([name, model_id, base_url, api_key]):
             print("\n❌ 所有字段必填")
             return False
-        
-        self._persist_config(name, model_id, api_key, base_url, provider_name)
+        self._persist_config(name, model_id, api_key, base_url, provider)
         print("\n✅ 自定义模型配置完成！")
         return True
-    
+
     def _persist_config(self, name: str, model_id: str, api_key: str,
                         base_url: str, provider: str) -> None:
-        """持久化模型配置到 .env 和 model_config.json"""
-        # 保存到 .env
         env_path = self.project_root / ".env"
-        env_lines = []
-        if env_path.exists():
-            env_lines = env_path.read_text(encoding="utf-8").splitlines()
-        
+        env_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
         env_dict = {}
         for line in env_lines:
             if "=" in line and not line.startswith("#"):
                 k, v = line.split("=", 1)
                 env_dict[k.strip()] = v.strip()
-        
         env_dict["DEFAULT_MODEL"] = model_id
         env_dict["DEFAULT_MODEL_API_KEY"] = api_key
         env_dict["DEFAULT_MODEL_BASE_URL"] = base_url
         env_dict["DEFAULT_MODEL_PROVIDER"] = provider
-        
         env_content = "\n".join(f"{k}={v}" for k, v in env_dict.items())
         env_path.write_text(env_content + "\n", encoding="utf-8")
-        
-        # 添加到模型池（优先级设为 0，默认模型）
         self.add_model(name, model_id, api_key, base_url, provider, is_default=True, priority=0)
-    
+
     def add_model(self, name: str, model_id: str, api_key: str,
                   base_url: str, provider: str, is_default: bool = False,
                   priority: int = 0) -> None:
-        """添加模型"""
         if is_default:
             for m in self._models.values():
                 m.is_default = False
-        
         self._models[model_id] = ModelConfig(
-            name=name,
-            model_id=model_id,
-            api_key=api_key,
-            base_url=base_url,
-            provider=provider,
-            is_default=is_default,
-            priority=priority,
+            name=name, model_id=model_id, api_key=api_key,
+            base_url=base_url, provider=provider,
+            is_default=is_default, priority=priority,
         )
         self._save()
-    
+
     def list_models(self) -> List[ModelConfig]:
-        """列出所有模型"""
         return list(self._models.values())
-    
+
     def get_default_model(self) -> Optional[ModelConfig]:
-        """获取默认模型"""
         for m in self._models.values():
             if m.is_default:
                 return m
         if self._models:
             return list(self._models.values())[0]
         return None
-    
+
     def set_default(self, model_id: str) -> bool:
-        """设置默认模型"""
         if model_id not in self._models:
             return False
         for m in self._models.values():
@@ -267,135 +265,205 @@ class ModelManager:
         self._models[model_id].is_default = True
         self._save()
         return True
-    
-    # ========== 模型调用与自动降级 ==========
-    
-    def chat(self, messages: List[Dict[str, str]], 
-             model_id: Optional[str] = None) -> Optional[str]:
+
+    # ========== 模型调用（自动降级 + 重试） ==========
+
+    async def chat(self, messages: List[Dict[str, str]],
+                   model_id: Optional[str] = None) -> Optional[str]:
         """
-        调用模型生成回复（带自动降级）
-        
-        1. 先尝试指定/默认模型
+        调用模型生成回复（带自动降级和重试）
+
+        1. 先尝试指定/默认模型（3 次重试）
         2. 失败时按优先级自动尝试其他已配置模型
-        
-        Args:
-            messages: 消息列表，每项含 role 和 content
-            model_id: 指定模型，默认使用默认模型
-            
-        Returns:
-            模型回复文本，或 None（所有模型均不可用）
         """
-        # 构建候选列表：优先使用指定/默认模型，其余按 priority 排序
         candidates = []
-        primary = None
-        
-        if model_id and model_id in self._models:
-            primary = self._models[model_id]
-        else:
-            primary = self.get_default_model()
-        
+        primary = self._models.get(model_id) if model_id else self.get_default_model()
         if primary:
             candidates.append(primary)
-        
-        # 其他模型按优先级排序
         others = sorted(
-            [m for m in self._models.values() if m.model_id != (primary.model_id if primary else None)],
-            key=lambda m: m.priority
+            [m for m in self._models.values()
+             if m.model_id != (primary.model_id if primary else None)],
+            key=lambda m: m.priority,
         )
         candidates.extend(others)
-        
+
         if not candidates:
             print("[ModelManager] 错误: 没有可用的模型配置")
             return None
-        
-        # 依次尝试
+
         for model in candidates:
             print(f"[ModelManager] 尝试调用 {model.name} ({model.model_id})...")
-            result = self._call_single(model, messages)
+            result = await self._call_single(model, messages)
             if result is not None:
-                if model.model_id != (primary.model_id if primary else None):
+                if primary and model.model_id != primary.model_id:
                     print(f"[ModelManager] ⚠️ 已自动降级到备用模型: {model.name}")
                 return result
-        
+
         print("[ModelManager] ❌ 所有模型均不可用，请检查 API Key 和网络连接")
         return None
-    
-    def _call_single(self, model: ModelConfig,
-                     messages: List[Dict[str, str]]) -> Optional[str]:
-        """调用单个模型"""
-        if model.provider in ["openai", "moonshot", "deepseek", "glm"]:
-            return self._call_openai_compatible(model, messages)
-        elif model.provider == "anthropic":
-            return self._call_anthropic(model, messages)
+
+    async def chat_stream(self, messages: List[Dict[str, str]],
+                          model_id: Optional[str] = None) -> AsyncIterator[str]:
+        """
+        流式调用模型（SSE）
+
+        Yields:
+            每个 token 片段
+        """
+        model = self._models.get(model_id) if model_id else self.get_default_model()
+        if not model:
+            print("[ModelManager] 错误: 没有可用的模型配置")
+            return
+
+        if model.provider == "anthropic":
+            async for chunk in self._stream_anthropic(model, messages):
+                yield chunk
         else:
-            return self._call_openai_compatible(model, messages)
-    
-    def _call_openai_compatible(self, model: ModelConfig, 
-                                 messages: List[Dict[str, str]]) -> Optional[str]:
-        """调用 OpenAI 兼容格式的 API"""
+            async for chunk in self._stream_openai_compatible(model, messages):
+                yield chunk
+
+    async def _call_single(self, model: ModelConfig,
+                           messages: List[Dict[str, str]]) -> Optional[str]:
+        if model.provider == "anthropic":
+            return await self._call_anthropic(model, messages)
+        return await self._call_openai_compatible(model, messages)
+
+    # ---------- OpenAI 兼容格式 ----------
+
+    @retry(
+        retry=retry_if_exception_type((httpx.NetworkError, httpx.TimeoutException)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    async def _call_openai_compatible(self, model: ModelConfig,
+                                       messages: List[Dict[str, str]]) -> Optional[str]:
+        url = f"{model.base_url}/chat/completions"
+        payload = {
+            "model": model.model_id,
+            "messages": messages,
+            "temperature": 0.7,
+        }
         try:
-            import urllib.request
-            import urllib.error
-            
-            url = f"{model.base_url}/chat/completions"
-            data = json.dumps({
-                "model": model.model_id,
-                "messages": messages,
-                "temperature": 0.7,
-            }).encode("utf-8")
-            
-            req = urllib.request.Request(
+            resp = await self._client.post(
                 url,
-                data=data,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {model.api_key}",
-                },
-                method="POST",
+                json=payload,
+                headers={"Authorization": f"Bearer {model.api_key}"},
             )
-            
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                choices = result.get("choices", [{}])
-                if choices and isinstance(choices, list):
-                    return choices[0].get("message", {}).get("content")
-                return None
-                
+            resp.raise_for_status()
+            data = resp.json()
+            choices = data.get("choices", [{}])
+            if choices and isinstance(choices, list):
+                return choices[0].get("message", {}).get("content")
+            return None
+        except httpx.HTTPStatusError as e:
+            print(f"[ModelManager] {model.name} HTTP 错误 {e.response.status_code}: {e.response.text[:200]}")
+            return None
         except Exception as e:
             print(f"[ModelManager] {model.name} 调用失败: {e}")
             return None
-    
-    def _call_anthropic(self, model: ModelConfig,
-                        messages: List[Dict[str, str]]) -> Optional[str]:
-        """调用 Anthropic API"""
+
+    async def _stream_openai_compatible(self, model: ModelConfig,
+                                         messages: List[Dict[str, str]]) -> AsyncIterator[str]:
+        url = f"{model.base_url}/chat/completions"
+        payload = {
+            "model": model.model_id,
+            "messages": messages,
+            "temperature": 0.7,
+            "stream": True,
+        }
         try:
-            import urllib.request
-            
-            url = f"{model.base_url}/messages"
-            data = json.dumps({
-                "model": model.model_id,
-                "messages": messages,
-                "max_tokens": 4096,
-            }).encode("utf-8")
-            
-            req = urllib.request.Request(
+            async with self._client.stream(
+                "POST", url,
+                json=payload,
+                headers={"Authorization": f"Bearer {model.api_key}"},
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data.get("choices", [{}])[0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                yield content
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            print(f"[ModelManager] {model.name} 流式调用失败: {e}")
+
+    # ---------- Anthropic 格式 ----------
+
+    @retry(
+        retry=retry_if_exception_type((httpx.NetworkError, httpx.TimeoutException)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    async def _call_anthropic(self, model: ModelConfig,
+                               messages: List[Dict[str, str]]) -> Optional[str]:
+        url = f"{model.base_url}/messages"
+        payload = {
+            "model": model.model_id,
+            "messages": messages,
+            "max_tokens": 4096,
+        }
+        try:
+            resp = await self._client.post(
                 url,
-                data=data,
+                json=payload,
                 headers={
-                    "Content-Type": "application/json",
                     "x-api-key": model.api_key,
                     "anthropic-version": "2023-06-01",
                 },
-                method="POST",
             )
-            
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                content = result.get("content", [{}])
-                if content and isinstance(content, list):
-                    return content[0].get("text")
-                return None
-                
+            resp.raise_for_status()
+            data = resp.json()
+            content = data.get("content", [{}])
+            if content and isinstance(content, list):
+                return content[0].get("text")
+            return None
+        except httpx.HTTPStatusError as e:
+            print(f"[ModelManager] {model.name} HTTP 错误 {e.response.status_code}: {e.response.text[:200]}")
+            return None
         except Exception as e:
             print(f"[ModelManager] {model.name} 调用失败: {e}")
             return None
+
+    async def _stream_anthropic(self, model: ModelConfig,
+                                 messages: List[Dict[str, str]]) -> AsyncIterator[str]:
+        url = f"{model.base_url}/messages"
+        payload = {
+            "model": model.model_id,
+            "messages": messages,
+            "max_tokens": 4096,
+            "stream": True,
+        }
+        try:
+            async with self._client.stream(
+                "POST", url,
+                json=payload,
+                headers={
+                    "x-api-key": model.api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            if data.get("type") == "content_block_delta":
+                                text = data.get("delta", {}).get("text", "")
+                                if text:
+                                    yield text
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            print(f"[ModelManager] {model.name} 流式调用失败: {e}")
