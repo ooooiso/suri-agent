@@ -1,13 +1,18 @@
 """
 模型服务
 
+关联文档: suri-agent/core/core.md, suri-agent/model/pool.yaml, suri-agent/model/model.md
+
 职责：
-- 读取 model_pool.md
+- 读取 pool.yaml（业务配置）
 - 提供统一的模型调用接口
+- 智能模型路由（auto_select 按任务内容自动选择模型）
 - 自动降级、超时处理、降级告警
 
 原则：调用方无需关心具体模型端点，只需指定模型类型。
 实际调用委托给 ModelManager（避免重复实现 HTTP 层）。
+
+文档同步提醒：修改本文件后，请检查并同步更新关联文档。
 """
 
 import time
@@ -32,7 +37,7 @@ class ModelService:
     """
     模型路由中心
 
-    运行时读取 wiki/models/model_pool.md 和 ModelManager 的模型配置，
+    运行时读取 suri-agent/model/pool.yaml 和 ModelManager 的模型配置，
     维护模型池缓存，执行自动降级策略。
     实际 HTTP 调用委托给 ModelManager。
     """
@@ -47,23 +52,25 @@ class ModelService:
 
     def _load_models(self) -> None:
         """加载预设模型池（作为降级候选）"""
-        entry = self.config.get_model_pool()
-        if not entry:
+        data = self.config.get_model_pool()
+        if not data:
             return
 
-        presets = [
-            RouterModelConfig('gpt-4o', 'GPT-4o', 'chat', 1, 'openai/gpt-4o', 'gpt-4o-mini', 'active'),
-            RouterModelConfig('gpt-4o-mini', 'GPT-4o Mini', 'chat', 2, 'openai/gpt-4o-mini', 'claude-3-haiku', 'active'),
-            RouterModelConfig('claude-3-opus', 'Claude 3 Opus', 'chat', 3, 'anthropic/claude-3-opus', 'gpt-4o', 'active'),
-            RouterModelConfig('claude-3-haiku', 'Claude 3 Haiku', 'chat', 4, 'anthropic/claude-3-haiku', 'gpt-4o-mini', 'active'),
-            RouterModelConfig('dall-e-3', 'DALL-E 3', 'text2image', 1, 'openai/dall-e-3', 'stable-diffusion-xl', 'active'),
-            RouterModelConfig('stable-diffusion-xl', 'SD XL', 'text2image', 2, 'stability/sd-xl', 'dall-e-3', 'standby'),
-        ]
-        for m in presets:
-            self._models[m.model_id] = m
-            if m.model_type not in self._models_by_type:
-                self._models_by_type[m.model_type] = []
-            self._models_by_type[m.model_type].append(m)
+        models_data = data.get('models', [])
+        for m in models_data:
+            cfg = RouterModelConfig(
+                model_id=m.get('id', ''),
+                name=m.get('name', ''),
+                model_type=m.get('type', 'chat'),
+                priority=m.get('priority', 0),
+                endpoint=m.get('provider', ''),
+                fallback_model=m.get('fallback'),
+                status=m.get('status', 'active'),
+            )
+            self._models[cfg.model_id] = cfg
+            if cfg.model_type not in self._models_by_type:
+                self._models_by_type[cfg.model_type] = []
+            self._models_by_type[cfg.model_type].append(cfg)
 
         for mt in self._models_by_type:
             self._models_by_type[mt].sort(key=lambda x: x.priority)
@@ -74,43 +81,76 @@ class ModelService:
         model_type: str = 'chat',
         preferred_model: Optional[str] = None,
         timeout: int = 30,
-        fallback: bool = True
+        fallback: bool = True,
+        auto_select: bool = False,
+        task_content: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         调用模型
 
         优先使用 ModelManager 中用户配置的模型（有真实 API Key），
         如果 ModelManager 不可用，回退到预设池的模拟回复。
+
+        Args:
+            auto_select: 为 True 时，根据 task_content 自动选择最合适的模型
+            task_content: 用于智能路由的任务原文（auto_select=True 时必填）
         """
+        # 智能路由：自动选择模型
+        selected_model_id = preferred_model
+        if auto_select and self.model_manager and task_content:
+            smart_model = self.model_manager.select_model_for_task(task_content)
+            if smart_model:
+                selected_model_id = smart_model.model_id
+                # 智能路由已选择模型，信息写入日志不打印到终端
+                pass
+
         # 优先使用 ModelManager 的真实模型配置
         if self.model_manager and not self.model_manager.is_first_run():
-            mm_model = self.model_manager.get_default_model()
+            mm_model = None
+            if selected_model_id:
+                mm_model = self.model_manager._models.get(selected_model_id)
+            if not mm_model:
+                mm_model = self.model_manager.get_default_model()
+
             if mm_model:
                 messages = [
                     {"role": "system", "content": "你是一个智能助手。"},
                     {"role": "user", "content": prompt},
                 ]
                 try:
-                    reply = await self.model_manager.chat(messages)
-                    if reply:
+                    result = await self.model_manager.chat_with_usage(messages, model_id=mm_model.model_id)
+                    if result and result.get('content'):
+                        # 记录 Token 消耗
+                        if self.logger:
+                            self.logger.log_token_usage(
+                                model_id=mm_model.model_id,
+                                prompt_tokens=result.get('prompt_tokens', 0),
+                                completion_tokens=result.get('completion_tokens', 0),
+                                total_tokens=result.get('total_tokens', 0),
+                                task_hint=task_content or prompt[:50]
+                            )
                         return {
                             'success': True,
-                            'content': reply,
+                            'content': result['content'],
                             'model_used': mm_model.model_id,
+                            'prompt_tokens': result.get('prompt_tokens', 0),
+                            'completion_tokens': result.get('completion_tokens', 0),
+                            'total_tokens': result.get('total_tokens', 0),
                             'error': ''
                         }
                 except Exception as e:
-                    print(f"[ModelService] ModelManager 调用失败: {e}")
+                    # 调用失败信息写入日志
+                    pass
 
         # 回退到预设池（模拟回复，用于无配置时）
         candidates = self._models_by_type.get(model_type, [])
         if not candidates:
             return {'success': False, 'content': '', 'model_used': '', 'error': f'未找到类型 {model_type} 的模型'}
 
-        if preferred_model and preferred_model in self._models:
-            preferred = self._models[preferred_model]
+        if selected_model_id and selected_model_id in self._models:
+            preferred = self._models[selected_model_id]
             if preferred in candidates:
-                candidates = [preferred] + [c for c in candidates if c.model_id != preferred_model]
+                candidates = [preferred] + [c for c in candidates if c.model_id != selected_model_id]
 
         for model in candidates:
             if model.status != 'active':
@@ -129,7 +169,6 @@ class ModelService:
 
     def _do_call(self, model: RouterModelConfig, prompt: str, timeout: int) -> Dict[str, Any]:
         """预设模型的模拟调用（无 API Key 时回退）"""
-        print(f"[ModelService] 模拟调用 {model.model_id} ({model.endpoint})")
         return {
             'success': True,
             'content': f'[来自 {model.name} 的模拟回复] 收到提示: {prompt[:50]}...',

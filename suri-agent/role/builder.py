@@ -48,6 +48,8 @@ class RoleBuilder:
         
         # 创建目录结构
         (role_dir / "memories").mkdir(parents=True)
+        (role_dir / "memories" / "insights").mkdir(parents=True)
+        (role_dir / "memories" / "patterns").mkdir(parents=True)
         (role_dir / "reference").mkdir(parents=True)
         (role_dir / "skills").mkdir(parents=True)
         
@@ -74,6 +76,8 @@ class RoleBuilder:
             "created_files": [
                 f"group/{department}/{role_id}/{role_id}.md",
                 f"group/{department}/{role_id}/memories/",
+                f"group/{department}/{role_id}/memories/insights/",
+                f"group/{department}/{role_id}/memories/patterns/",
                 f"group/{department}/{role_id}/reference/files_i_use.md",
                 f"group/{department}/{role_id}/skills/skills.md",
             ],
@@ -189,6 +193,8 @@ department: {department}
 ## 独立存储
 
 - 记忆：group/{department}/{role_id}/memories/
-- 会话：group/{department}/{role_id}/memories/role.db
+- 学习经验：group/{department}/{role_id}/memories/insights/*.md
+- 成功模式：group/{department}/{role_id}/memories/patterns/*.md
+- 会话数据库：group/{department}/{role_id}/memories/role.db
 - 技能：group/{department}/{role_id}/skills/
 """

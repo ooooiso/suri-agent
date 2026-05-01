@@ -1,5 +1,7 @@
 # 规则总览
 
+> 关联代码: suri-agent/rules/file_ownership.py, suri-agent/rules/security.py, suri-agent/rules/communication.py, suri-agent/rules/doc_sync_rule.py, suri-agent/rules/schedule.py
+
 所有规则已代码化，位于 `suri-agent/rules/` 下，运行时直接调用执行。
 
 ---
@@ -9,10 +11,13 @@
 - **"安全审批规则"** 一切给予角色。受监控文件的修改必须生成变更报告，经 security_admin 审核、suri 向用户请求确认后，方可执行。超范围操作被实时阻断。
 
 - **"文件所有权规则"** 一切给予角色。每个路径都有明确的控制角色，修改前校验操作者是否有权。跨角色操作需获得目标控制角色的书面授权。
+  - `role_self` 逻辑支持 `group/<dept>/<role>/` 路径格式
+  - `suri-hr` 对 `group/` 下所有路径有管理权限（优先级高于 `role_self`）
 
 - **"模型路由规则"** 一切给予角色。根据任务类型选择模型类别，主模型超时或报错时自动降级。连续降级 3 次触发告警。
 
 - **"通信协议规则"** 一切给予角色。角色间通过 role_id 寻址，消息含必填字段。普通成员禁止跨部门直连，跨部门必须由双方总监对接并抄送 suri。
+  - `CommunicationRule` 支持从 ConfigService 动态读取角色 `department`，新增角色无需修改代码
 
 - **"角色生命周期规则"** 一切给予角色。角色的创建、修改、注销均有标准流程。创建需更新索引并走安全审批；修改 Soul 需 workflow_admin + security_admin 双重审核；注销后归档保留 30 天。
 
@@ -29,3 +34,10 @@
   4. document-review 审核 → 用户确认 → 执行写入
   5. 违规状态持久化到 `.doc_sync_rule_state.json`
   目标：实现"代码变更即文档更新"的自动化闭环，无需人工记忆。
+
+- **"工具同步规则"** 一切给予角色。ToolSyncRule 引擎持续监控 suri-agent/tools/ 目录下的工具变更和角色 soul 文件的 `tools` 字段变更，自动维护 `tool_registry.json`（业务配置）和 `tool_registry.md`（说明文档）。检测流程：
+  1. DocWatcher 后台监控 tools/ 目录，捕获新增/删除/修改事件
+  2. ToolSyncRule.scan() 扫描实际工具目录 vs 注册表 vs 角色权限矩阵，标记缺失/过时项
+  3. ToolSyncRule.generate_json() / write_json() 自动生成包含工具列表和权限的 tool_registry.json；write_markdown() 生成纯说明文档 tool_registry.md
+  4. document-review 审核 → 用户确认 → 执行写入
+  目标：实现"工具变更即注册表更新"的自动化闭环，确保角色始终知道自己有哪些工具。

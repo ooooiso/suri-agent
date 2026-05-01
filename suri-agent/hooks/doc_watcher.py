@@ -2,7 +2,7 @@
 文档监控钩子
 
 职责：
-- 监控 suri-agent/、group/、wiki/ 下的文件变更
+- 监控 suri-agent/、group/ 下的文件变更
 - 代码文件保存时，自动检测对应的同名 .md 是否需要更新
 - 将违规项加入待同步队列，供 DocSyncRule 处理
 
@@ -32,7 +32,7 @@ class DocWatcher:
             print(f"检测到 {len(pending)} 个目录需要同步文档")
     """
     
-    WATCH_DIRS = ["suri-agent", "group", "wiki"]
+    WATCH_DIRS = ["suri-agent", "group", "tools"]
     
     def __init__(self, project_root: Path, callback: Optional[Callable] = None):
         self.project_root = project_root

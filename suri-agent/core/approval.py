@@ -63,7 +63,7 @@ class ApprovalService:
         self._pending_approvals[approval_id] = record
         
         # TODO: 通知 security_admin 审核
-        print(f"[ApprovalService] 新审批请求 {approval_id} 来自 {record['requester']}")
+        # 审批请求已记录，不打印到终端
         
         return approval_id
     
@@ -88,12 +88,12 @@ class ApprovalService:
             record['status'] = 'pending_user_confirm'
             record['security_review'] = {'reviewer': reviewer, 'result': 'approved'}
             # TODO: 通知 suri 向用户请求确认
-            print(f"[ApprovalService] {approval_id} 安全审核通过，等待用户确认")
+            # 安全审核通过，不打印到终端
         else:
             record['status'] = 'rejected'
             record['security_review'] = {'reviewer': reviewer, 'result': 'rejected', 'reason': reason}
             # TODO: 通知请求者
-            print(f"[ApprovalService] {approval_id} 被 security_admin 驳回: {reason}")
+            # 审批被驳回，不打印到终端
         
         return True
     
@@ -133,7 +133,7 @@ class ApprovalService:
             self.security.register_approval(token, record)
             
             # TODO: 通知请求者执行
-            print(f"[ApprovalService] {approval_id} 用户已批准，令牌: {token}")
+            # 用户已批准，不打印到终端
             return {'success': True, 'approval_token': token, 'reason': '用户已确认'}
         
         elif normalized in ['否', 'no', 'n', '拒绝', 'reject']:
@@ -155,7 +155,7 @@ class ApprovalService:
                 if now > expires:
                     record['status'] = 'timeout'
                     timeouts.append(approval_id)
-                    print(f"[ApprovalService] {approval_id} 已超时")
+                    # 审批已超时，不打印到终端
         return timeouts
     
     def get_status(self, approval_id: str) -> Optional[Dict[str, Any]]:

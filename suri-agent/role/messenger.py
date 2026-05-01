@@ -9,7 +9,7 @@
 """
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 class RoleMessenger:
@@ -29,8 +29,10 @@ class RoleMessenger:
         "escalation": 90,
     }
     
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, projection_service=None, config=None):
         self.project_root = project_root
+        self.projection = projection_service  # 投影服务
+        self.config = config  # ConfigService，用于动态读取角色 department
     
     def send(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -58,7 +60,7 @@ class RoleMessenger:
             }
         
         # 3. 路由消息
-        return {
+        result = {
             "success": True,
             "message_id": message.get("message_id"),
             "routed": True,
@@ -67,6 +69,40 @@ class RoleMessenger:
             "channel": self._get_channel(sender, receiver),
             "retention_days": self._get_retention_days(message),
         }
+        
+        # 4. 投影到 Telegram（新增）
+        if self.projection:
+            import asyncio
+            # 确定投影目标
+            project_to = self._get_project_targets(sender, receiver)
+            if project_to:
+                asyncio.create_task(
+                    self.projection.project_message(project_to, sender, receiver, message)
+                )
+        
+        return result
+    
+    def _get_project_targets(self, sender: str, receiver: str) -> list:
+        """获取投影目标 Telegram 群组"""
+        dept_map = self._get_department_map()
+        sender_dept = dept_map.get(sender, 'unknown')
+        receiver_dept = dept_map.get(receiver, 'unknown')
+        
+        targets = []
+        
+        # 同部门通信 → 投影到该部门群
+        if sender_dept == receiver_dept and sender_dept != 'unknown':
+            targets.append(f"tg:{sender_dept}")
+        
+        # 跨部门通信 → 投影到双方部门群 + 中枢群
+        elif sender_dept != receiver_dept:
+            if sender_dept != 'unknown':
+                targets.append(f"tg:{sender_dept}")
+            if receiver_dept != 'unknown':
+                targets.append(f"tg:{receiver_dept}")
+            targets.append("tg:central")
+        
+        return targets
     
     def _validate_format(self, message: Dict[str, Any]) -> tuple[bool, str]:
         """校验消息格式"""
@@ -126,9 +162,12 @@ class RoleMessenger:
         return self.RETENTION_DAYS.get(msg_type, 30)
     
     def _get_department_map(self) -> Dict[str, str]:
-        """获取角色到部门的映射（简化版）"""
-        return {
-            "suri": "central",
-            "suri-hr": "central",
-            "suri-dev": "central",
-        }
+        """获取角色到部门的映射（从 Soul 文件动态读取）"""
+        if self.config:
+            return {
+                role_id: self.config.get_role_soul(role_id).meta.get('department', 'central')
+                for role_id in self.config.list_roles()
+                if self.config.get_role_soul(role_id)
+            }
+        # 硬编码回退（仅用于无 config 的测试场景）
+        return {"suri": "central"}

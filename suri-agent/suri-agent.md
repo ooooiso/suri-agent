@@ -31,11 +31,8 @@ suri/                               # 项目根目录
 │   ├── install.sh                  # 系统安装脚本
 │   └── suri-daemon                 # 后台管理命令
 │
-├── wiki/                           # 知识库（用户面向，可编辑）
-│   ├── state_schema.md             # 数据库表结构说明文档
-│   ├── models/model_pool.md        # 模型池配置
-│   ├── communication/telegram.md   # 通信配置
-│   └── memory/memory_config.md     # 记忆策略配置
+├── wiki/                           # 预留：LLM Wiki 资料文件夹（未来用于 AI 可编辑知识库）
+│                                   # 当前不存放业务配置，业务配置已迁移至各模块目录
 │
 │  【运行时生成 — 程序运行后自动创建/修改】
 ├── .env                            # 环境变量（首次运行引导写入）
@@ -99,7 +96,7 @@ suri/                               # 项目根目录
     │   ├── core.md                 # 核心调度层说明
     │   ├── task_dispatcher.py      # 任务调度器
     │   ├── model_router.py         # 模型路由
-    │   ├── context.py              # 上下文管理
+    │   ├── context.py              # 上下文管理（构建角色系统提示，注入 Soul、规则、记忆、工具、模型信息）
     │   ├── approval.py             # 审批引擎
     │   ├── tool_executor.py        # 工具执行器
     │   └── doc_sync.py             # 文档同步服务
@@ -108,6 +105,13 @@ suri/                               # 项目根目录
     │   ├── model.md                # 模型管理说明
     │   ├── __init__.py             # 入口
     │   └── manager.py              # 模型配置与调用管理
+    │
+    ├── learning/                   # 自学习引擎
+    │   ├── learning.md             # 自学习说明
+    │   ├── role_learner.py         # 角色学习引擎（从任务反馈提取经验、检测技能形成）
+    │   ├── experience_extractor.py # 经验提取器（LLM 分析任务记录生成结构化洞察）
+    │   ├── feedback_collector.py   # 反馈收集器
+    │   └── platform_learner.py     # 平台级学习聚合
     │
     ├── memory/                     # 记忆总目录
     │   ├── memory.md               # 记忆总目录说明
@@ -162,10 +166,15 @@ suri/                               # 项目根目录
     │
     ├── tools/                      # 公共工具库（可选调用）
     │   ├── tools.md                # 工具库说明
-    │   ├── tool_registry.md        # 工具注册索引
+    │   ├── tool_registry.json      # 工具注册索引（唯一权威来源，含权限级别）
+    │   ├── tool_registry.md        # 工具注册说明文档（纯人类可读，自动生成）
+    │   ├── model_manager/          # 模型管理工具
+    │   ├── web_fetch/              # 网页获取工具
     │   ├── data_converter/         # 数据转换
     │   ├── file_compressor/        # 文件压缩
     │   └── image_processor/        # 图像处理
+    │   
+    │   > 新增工具只需注册到 `tool_registry.json`，角色权限和上下文描述自动推导。
     │
     ├── hooks/                      # 事件钩子
     │   ├── hooks.md                # 钩子说明
@@ -249,7 +258,7 @@ group/<department>/<role_id>/
 |------|------|------|------|
 | **主程序** | `suri-agent/` | 运行时框架、初期调度、接入层、基础设施 | 源代码（受保护） |
 | **角色** | `group/` | 部门、总监、成员的定义与自治 | 源代码 + 运行时记忆 |
-| **知识库** | `wiki/` | 用户面向的可编辑知识 | 可编辑 |
+| **预留 Wiki** | `wiki/` | LLM Wiki 资料（未来 AI 可编辑知识库） | 预留 |
 | **资源库** | `resources/` | 运行时缓存、会话、临时文件 | 运行时生成 |
 
 ### 4.2 分层架构
@@ -272,7 +281,7 @@ group/<department>/<role_id>/
 ### 4.2 模块职责详细定义
 
 **access/** — 接入层
-- `cli.py`：终端命令行客户端，**只负责接收用户输入和显示输出，不处理业务逻辑**。所有业务逻辑交给 suri 角色处理。
+- `cli.py`：终端命令行客户端，**只负责接收用户输入和显示输出，不处理业务逻辑**。支持 `/reload` 进程级热重载（`os.execv` 重启），代码变更检测提示。
 - `server.py`：JSON-RPC 服务端
 - `rpc_methods.py`：RPC 方法定义
 - `middleware.py`：请求中间件
@@ -281,8 +290,8 @@ group/<department>/<role_id>/
 
 **core/** — 核心调度层
 - `task_dispatcher.py`：接收→解析→匹配部门→下发总监→跟踪→交付
-- `model_router.py`：按任务类型选择模型，超时/报错时自动降级
-- `context.py`：构建角色上下文，注入 Soul、技能、记忆
+- `model_router.py`：按任务类型**智能选择模型**，超时/报错时自动降级，支持 `auto_select` 按任务内容选模
+- `context.py`：构建角色上下文，注入 Soul、规则、文件权限、经验、记忆、**可用工具列表**、**当前模型信息**
 - `approval.py`：安全审批流程管理
 - `tool_executor.py`：调用公共工具，执行角色技能中的脚本
 - `doc_sync.py`：文档同步服务，检测代码变更→调用大模型生成摘要→用户确认→写入核心记忆库
@@ -368,7 +377,7 @@ group/<department>/<role_id>/
 | `config.yaml` | suri-dev | 运行时参数配置 |
 | `.env` | suri-dev | 环境变量与密钥 |
 | `resources/` | role_self / suri | 运行时资源 |
-| `wiki/` | suri-dev | 知识库（可编辑） |
+| `wiki/` | suri-dev | 预留：LLM Wiki 资料（不用于业务逻辑） |
 
 ---
 
@@ -436,12 +445,15 @@ group/<department>/<role_id>/
 |--------|------|------|
 | 新增角色 | suri-hr 调用 builder.py | 按标准流程创建目录和 Soul |
 | 新增技能 | 角色自行维护 | 在角色 skills/ 目录下创建 |
-| 新增工具 | 开发后注册 | 放入 tools/，更新 tool_registry.md |
+| 新增工具 | 开发后注册 | 放入 tools/，更新 tool_registry.json（业务配置）和 tool_registry.md（说明文档） |
 | 新增 MCP 服务 | 在 mcp/services/ 下创建 | 继承 BaseMCPService，自动加载 |
 | 新增规则 | 修改 rules/ | 继承 BaseRule，注册到 RuleEngine |
 | 新增流程 | 修改 process/ | 继承 BaseProcess，注册到 ProcessEngine |
 | 核心记忆更新 | 调用 DocSyncService | 开发完成后自动检测变更，生成摘要，审核后写入 |
-| 文档自动同步 | DocSyncRule + DocWatcher | 后台监控代码变更，自动检测违规项，驱动大模型更新 |
+| 文档自动同步 | DocSyncRule + DocWatcher | 后台监控代码变更，自动检测违规项，**启动时强制提示**，驱动大模型更新 |
+| 进程热重载 | `/reload` (os.execv) | 修改代码后输入 `/reload`，进程重启加载全新代码，无需手动退出 |
+| 模型信息上下文注入 | ContextService.build_context() | 所有调度角色的系统提示自动包含当前模型名称/ID/提供商 |
+| **网页获取工具** | `web_fetch` | 角色可获取指定 URL 内容或搜索关键词，弥补模型知识截止日期局限 |
 
 ---
 
@@ -474,6 +486,31 @@ group/<department>/<role_id>/
 | 2026-05-01 | 主循环跑通：asyncio.Queue 消息队列 + 消费者/生产者/超时检查 | suri |
 | 2026-05-01 | 补单元测试：test_model_manager（14 项）+ test_task_dispatcher（10 项）| suri |
 | 2026-05-01 | 调度智能化：三级部门匹配（关键词 → LLM 分类 → central 兜底）| suri |
+| 2026-05-01 | **终端输出清理**：移除 cli.py/manager.py/logger.py/task_dispatcher.py 所有调试 print，日志只写入文件 | suri |
+| 2026-05-01 | **模型管理重构**：`/model` 改为品牌选择流（1-5 → API Key → 自动测试）；新增 `/models` 交互式浏览器 | suri |
+| 2026-05-01 | **模型类型分类**：`ModelConfig` 新增 `model_type` 字段（text_chat/vision/image_generation/audio/embedding/text_completion）| suri |
+| 2026-05-01 | **模型失败自动恢复**：401/403/429/503/timeout 时终端提示 `是否立即配置新模型？` 并启动向导 | suri |
+| 2026-05-01 | **工具迁移**：模型管理从 cli.py 内联代码提取为 `tools/model_manager/scripts/main.py`（5 个操作）| suri |
+| 2026-05-01 | **工具权限系统**：`ToolService.execute()` 检查 caller_role 与角色 soul 的 `tools` 字段匹配 | suri |
+| 2026-05-01 | **自动工具注册维护**：`ToolSyncRule` 扫描 tools/、角色 soul、技能文件，自动生成 `tool_registry.json`（业务配置）和 `tool_registry.md`（说明文档） | suri |
+| 2026-05-01 | **Skill-Tool-Task 闭环**：Skill 模板新增 `tools` 字段；`ExtractedInsight` 记录 `tools_used`/`skill_suggestion`；`ExperienceExtractor` 分析工具使用模式；`RoleLearner` 从重复工具模式生成技能建议；`ToolSyncRule` 检测技能对变更工具的依赖；`ToolService` 记录调用历史到 `logs/tool_calls/` | suri |
+| 2026-05-01 | **`/reload` 进程级热重载**：从 `self.initialize()` 改为 `os.execv()` 重启进程，加载全新代码 | suri |
+| 2026-05-01 | **角色上下文注入模型信息**：`ContextService.build_context()` 新增 `model_info` 参数，所有调度角色系统提示包含当前模型名称/ID/提供商 | suri |
+| 2026-05-01 | **建立三层文档同步强制防护机制**：(1) 代码层 — cli.py 启动时自动运行 `DocSyncRule.scan()` 强制提示违规；(2) 角色层 — suri-dev Soul 写入"绝对规则 #1"，document-review 将文档不同步设为一票否决；(3) 流程层 — AGENTS.md 强制执行 + `/sync` 主动检查 | suri |
+| 2026-05-01 | **补全 suri-agent.md 遗漏变更**：同步目录结构（learning/、tools/model_manager/、logs/tool_calls/）、模块职责、扩展机制、规则定义 | suri |
+| 2026-05-01 | **修复调度误触发 bug**：`_execute_dispatch()` 改用两层匹配策略（先精确匹配 suri 回复中的角色 ID，再关键词匹配用户输入），去掉 `suri-hr` 中太宽泛的 `'角色'` 关键词，避免 suri 回复中的"建议咨询 suri-dev 角色"误触发 suri-hr 调度 | suri |
+| 2026-05-01 | **新增 web_fetch 网页获取工具**：支持 `fetch`（获取 URL 内容）和 `search`（DuckDuckGo 搜索），弥补模型知识截止日期局限 | suri |
+| 2026-05-01 | **重构工具权限体系**：引入 `public/maintainer/role_id` 三级权限级别，`tool_registry.json` 成为唯一权威来源；角色 Soul 不再需要逐个列工具；`context.py` 和 `tool_executor.py` 改为动态解析 | suri |
+| 2026-05-01 | **建立统一订阅规则**：重构 7 个逐一同步点位为自动推导，创建 `UNIFIED_SUBSCRIPTION.md` 定义各领域的唯一权威来源 | suri |
+| 2026-05-01 | **模型配置 JSON 化**：`manager.py` 5 个硬编码字典 → `model/presets.json` 单一来源 | suri |
+| 2026-05-01 | **日志分类配置化**：`logger.py` 硬编码 `CATEGORIES` → `logs/categories.yaml` 配置文件 | suri |
+| 2026-05-01 | **规则/流程自动扫描**：`rules/__init__.py` 和 `process/__init__.py` 的硬编码字典 → 运行时自动扫描目录发现类 | suri |
+| 2026-05-01 | **命令路由注册表**：`cli.py` `/help` 硬编码文案 → `_COMMAND_REGISTRY` 字典自动生成 | suri |
+| 2026-05-01 | **规则摘要自动生成**：`context.py` 硬编码规则摘要 → 从 `rules/*.py` docstring 动态生成 | suri |
+| 2026-05-01 | **主程序与角色解耦**：`cli.py` 调度逻辑零硬编码角色名，`dispatch_keywords` 和 `role_keywords` 从 `ConfigService` 动态获取；新增角色只需创建 Soul 文件，主程序无需修改 | suri |
+| 2026-05-01 | **角色技能自动索引**：`ConfigService.list_role_skills()` 运行时扫描 `group/<role>/skills/` 目录 | suri |
+| 2026-05-01 | **group_function 完全自动生成**：`ConfigService.sync_group_function()` 从所有 Soul 文件扫描生成完整角色索引，`/sync` 命令集成自动更新 | suri |
+| 2026-05-01 | **wiki/ 目录业务配置迁移**：wiki/ 回归预留的 LLM Wiki 资料文件夹，不再存放业务配置；`telegram.md` → `access/telegram/groups.yaml`；`memory_config.md` → `memory/config.yaml`；`model_pool.md` → `model/pool.yaml`；`available_models.md` / `state_schema.md` → 对应模块目录；所有代码读取路径同步更新 | suri |
 
 ---
 

@@ -30,3 +30,28 @@ logs/system/.suri.pid
 __pycache__/
 *.pyc
 *.pyo
+
+# 运行时数据（不应提交）
+.kimi/
+group/**/memories/*.db-shm
+group/**/memories/*.db-wal
+suri-agent/state/
+suri-agent/logs/
+logs/categories.yaml
+logs/statistics/
+resources/archives/
+resources/exports/
+resources/uploads/
+
+# 测试运行时生成的角色记忆文件
+group/**/memories/*test_topic_*.md
+group/**/memories/2026*.md
+
+# 角色运行时经验文件（自动生成）
+group/**/memories/insights/*.md
+group/**/memories/patterns/*.md
+group/**/memories/*.md
+
+# 审计报告（运行时生成）
+group/**/reports/2026*.md
+group/**/reports/*_audit_*.md

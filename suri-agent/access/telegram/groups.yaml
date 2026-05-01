@@ -1,0 +1,13 @@
+# Telegram 群组映射配置
+# 业务配置：部门 → Telegram 群组 ID
+# 说明文档见 telegram.md
+
+telegram:
+  enabled: true
+  bot_username: "@suri_agent_bot"
+  central_group_id: "-1001234567890"
+
+groups:
+  central: "-1001234567890"
+  design: "-1009876543210"
+  engineering: "-1005555666677"

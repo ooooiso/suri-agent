@@ -197,21 +197,26 @@ class RPCHandler:
     # ==================== 任务管理 ====================
     
     def get_tasks(self, status: Optional[str] = None, limit: int = 50, **kwargs) -> List[Dict[str, Any]]:
-        """获取任务列表"""
-        # TODO: 从 state.db 查询任务列表
-        # 当前返回模拟数据
-        return []
+        """获取任务列表（聚合所有角色的数据库）"""
+        return self.memory.get_all_tasks(status=status, limit=limit)
     
     def get_task_detail(self, task_id: str, **kwargs) -> Dict[str, Any]:
-        """获取任务详情"""
-        task = self.memory.get_task(task_id)
-        if not task:
-            return {'error': f'任务 {task_id} 不存在'}
-        return task
+        """获取任务详情（跨所有角色数据库搜索）"""
+        # 遍历所有角色的数据库查找任务
+        for role_id in self.config.list_roles():
+            task = self.memory.get_task(role_id, task_id)
+            if task:
+                task['found_in_role'] = role_id
+                return task
+        return {'error': f'任务 {task_id} 不存在'}
     
     def get_task_messages(self, task_id: str, limit: int = 50, **kwargs) -> List[Dict[str, Any]]:
-        """获取任务的消息历史"""
-        return self.memory.get_task_messages(task_id)[-limit:]
+        """获取任务的消息历史（跨所有角色数据库搜索）"""
+        for role_id in self.config.list_roles():
+            messages = self.memory.get_task_messages(role_id, task_id)
+            if messages:
+                return messages[-limit:]
+        return []
     
     def send_message(self, to: str, content: str, msg_type: str = 'text', **kwargs) -> Dict[str, Any]:
         """
@@ -238,9 +243,8 @@ class RPCHandler:
     # ==================== 审批管理 ====================
     
     def get_pending_approvals(self, **kwargs) -> List[Dict[str, Any]]:
-        """获取待处理的审批列表"""
-        # TODO: 从 ApprovalService 查询
-        return []
+        """获取待处理的审批列表（跨所有角色数据库搜索）"""
+        return self.memory.get_pending_approvals()
     
     def get_approval_detail(self, approval_id: str, **kwargs) -> Dict[str, Any]:
         """获取审批详情"""
@@ -363,10 +367,7 @@ class RPCHandler:
     
     def get_model_pool(self, **kwargs) -> Dict[str, Any]:
         """获取模型池信息"""
-        entry = self.config.get_model_pool()
-        if not entry:
+        data = self.config.get_model_pool()
+        if not data:
             return {'error': '模型池未加载'}
-        return {
-            'meta': entry.meta,
-            'body': entry.body,
-        }
+        return data

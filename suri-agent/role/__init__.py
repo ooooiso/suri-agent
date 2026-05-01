@@ -18,10 +18,10 @@ from role.builder import RoleBuilder
 class RoleManager:
     """角色管理入口"""
     
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, config=None):
         self.project_root = project_root
-        self.coordinator = RoleCoordinator(project_root)
-        self.messenger = RoleMessenger(project_root)
+        self.coordinator = RoleCoordinator(project_root, config)
+        self.messenger = RoleMessenger(project_root, config=config)
         self.builder = RoleBuilder(project_root)
 
 

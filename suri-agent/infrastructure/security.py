@@ -1,6 +1,8 @@
 """
 安全服务
 
+关联文档: suri-agent/infrastructure/infrastructure.md, suri-agent/rules/rules.md
+
 职责：
 - 调用规则代码（FileOwnershipRule、SecurityRule）执行权限校验
 - 提供审批令牌的注册与验证
@@ -23,15 +25,58 @@ class SecurityService:
     运行时调用规则代码：
     - FileOwnershipRule: 文件所有权校验
     - SecurityRule: 安全审批流程
+    
+    V2.0: 新增核心角色保护机制
     """
+    
+    # 五大核心角色（不可删除）
+    CORE_ROLES = {'suri', 'suri_dev', 'suri_hr', 'suri_review', 'suri_stats'}
     
     def __init__(self, project_root: Path, config: ConfigService):
         self.config = config
         self.project_root = project_root
-        self.file_ownership = FileOwnershipRule(project_root)
+        self.file_ownership = FileOwnershipRule(project_root, config)
         self.security = SecurityRule(project_root)
     
+    def is_core_role(self, role_id: str) -> bool:
+        """检查角色是否为核心角色（不可删除）"""
+        resolved = ConfigService.resolve_role_id(role_id)
+        return resolved in self.CORE_ROLES
+    
     def check_permission(self, operator: str, target_path: str) -> tuple[bool, str]:
+        """
+        检查操作者是否有权修改目标路径
+        
+        V2.0: 增加核心角色 Soul 文件保护
+        """
+        # 核心角色保护：禁止非 admin 修改核心角色的 Soul 文件
+        if self._is_core_role_soul_target(target_path):
+            # V2.0: Soul 文件由 admin（suri_hr）专属管理
+            resolved_op = ConfigService.resolve_role_id(operator)
+            if resolved_op != 'suri_hr':
+                return False, f"核心角色 Soul 文件受保护，仅 hr 可修改"
+        
+        result = self.file_ownership.execute({
+            "role_id": operator,
+            "target_path": target_path,
+        })
+        
+        if result["allowed"]:
+            return True, f"{operator} 有权操作 {target_path}"
+        
+        owner = result.get("owner", "unknown")
+        return False, f"{operator} 无权操作 {target_path}，控制角色为 {owner}"
+    
+    def _is_core_role_soul_target(self, target_path: str) -> bool:
+        """检查目标路径是否为核心角色的 Soul 文件"""
+        path = target_path.lstrip("/")
+        for core_role in self.CORE_ROLES:
+            # 匹配 group/central/<role>/<role>.md 或 group/<role>/<role>.md
+            if path.startswith(f"group/central/{core_role}/{core_role}.md"):
+                return True
+            if path.startswith(f"group/{core_role}/{core_role}.md"):
+                return True
+        return False
         """
         检查操作者是否有权修改目标路径
         
@@ -107,14 +152,14 @@ class SecurityService:
         
         返回 (allow, reason)。
         """
-        # 1. 权限检查
+        # 1. 豁免场景（自动操作无需审批）
+        if self._is_exempt(target_path):
+            return True, "[豁免] 自动操作无需审批"
+        
+        # 2. 权限检查
         allowed, reason = self.check_permission(operator, target_path)
         if not allowed:
             return False, f"[权限拒绝] {reason}"
-        
-        # 2. 豁免场景（自动操作无需审批）
-        if self._is_exempt(target_path):
-            return True, "[豁免] 自动操作无需审批"
         
         # 3. 监控范围检查
         if not self.security.is_monitored(target_path):

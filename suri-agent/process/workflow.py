@@ -49,19 +49,19 @@ class WorkflowProcess(BaseProcess):
         return handler(context)
     
     def _standard_task_flow(self, context: Dict) -> Dict:
-        """标准任务流：用户 → suri → 总监 → 成员 → 交付"""
+        """标准任务流：用户 → 调度者 → 总监 → 成员 → 交付"""
         return {
             "success": True,
             "scenario": "standard",
             "steps": [
-                "suri 接收需求，生成 task_id",
-                "suri 解析需求，匹配责任部门和总监",
-                "suri 向总监发送结构化任务消息",
+                "调度者接收需求，生成 task_id",
+                "调度者解析需求，匹配责任部门和总监",
+                "调度者向总监发送结构化任务消息",
                 "总监在部门群内拆解任务，指派给成员",
                 "成员按技能执行任务，可向总监请求协助",
                 "成员完成后向总监汇报，总监审核质量",
-                "总监向 suri 交付最终结果",
-                "suri 汇总（多部门则整合），向用户呈现",
+                "总监向调度者交付最终结果",
+                "调度者汇总（多部门则整合），向用户呈现",
             ],
             "next_role": "department_director",
         }
@@ -136,15 +136,15 @@ class WorkflowProcess(BaseProcess):
             "success": True,
             "scenario": "capability_gap",
             "steps": [
-                "suri 读取部门职能索引，遍历所有部门 function 字段",
+                "调度者读取部门职能索引，遍历所有部门 function 字段",
                 "匹配失败（无任何重叠）",
-                "suri 向用户汇报能力缺口，列出所有部门及职能摘要",
+                "调度者向用户汇报能力缺口，列出所有部门及职能摘要",
                 "询问用户是否需要新建部门/角色",
-                "用户确认后，suri 收集扩展需求（部门名称、职能、所需角色及技能）",
-                "suri 向 suri-hr 发起组织扩展请求",
-                "suri-hr 按角色生命周期规则执行创建",
-                "新部门/角色上线，suri 更新职能索引",
-                "suri 重新调度原需求至新部门",
+                "用户确认后，调度者收集扩展需求（部门名称、职能、所需角色及技能）",
+                "调度者向人力资源角色发起组织扩展请求",
+                "人力资源角色按角色生命周期规则执行创建",
+                "新部门/角色上线，调度者更新职能索引",
+                "调度者重新调度原需求至新部门",
             ],
             "constraints": [
                 "缺口必须明确展示，让用户判断是需求不清还是确实需要新能力",
@@ -159,12 +159,12 @@ class WorkflowProcess(BaseProcess):
             "success": True,
             "scenario": "skill沉淀",
             "steps": [
-                "任务完成，开发人员撰写技能总结",
-                "提交给 suri",
-                "suri 提交 workflow_admin 审核",
-                "审核通过 → suri 向用户确认",
+                "任务完成，执行角色撰写技能总结",
+                "提交给调度者",
+                "调度者提交 workflow_admin 审核",
+                "审核通过 → 调度者向用户确认",
                 "用户回复是",
-                "suri-hr 协助将技能写入角色 skills/ 目录",
+                "人力资源角色协助将技能写入角色 skills/ 目录",
                 "更新 skills/skills.md 索引",
                 "git_admin 记录到 changelog.md",
             ],

@@ -85,7 +85,14 @@ class DocSyncService:
             f"- [{c['type']}] {c['path']}" for c in changes
         )
         
-        prompt = f"""你是 suri 平台的文档审核员（document-review）。
+        # V2.0: 动态获取审核者角色显示名
+        reviewer_name = "文档审核员"
+        if hasattr(self, 'config') and self.config:
+            reviewer_roles = self.config.get_roles_by_type("reviewer")
+            if reviewer_roles:
+                reviewer_name = self.config.get_role_nickname(reviewer_roles[0])
+        
+        prompt = f"""你是 suri 平台的文档审核员（{reviewer_name}）。
 
 以下文件发生了变更：
 {change_list}

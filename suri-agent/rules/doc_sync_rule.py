@@ -1,10 +1,12 @@
 """
 文档同步规则（代码化）
 
+关联文档: suri-agent/rules/rules.md
+
 核心规则：
 1. suri-agent/ 下任何目录发生代码变更时，必须同步更新该目录的同名 .md 文件
 2. group/ 下任何角色目录发生变更时，必须同步更新该角色的 Soul 文件和技能文档
-3. wiki/ 下任何目录发生变更时，必须同步更新该目录的同名 .md 文件
+3. suri-agent/、group/ 下任何目录发生变更时，必须同步更新该目录的同名 .md 文件
 4. 同步流程：检测变更 → 大模型生成更新建议 → document-review 审核 → 用户确认 → 写入
 
 职责：
@@ -53,7 +55,7 @@ class DocSyncRule:
         self.watch_paths = [
             ("suri-agent", ".py"),    # suri-agent/ 下的 .py 变更 → 触发同名 .md 检查
             ("group", ".md"),         # group/ 下的变更 → 检查角色 Soul 文件
-            ("wiki", ".md"),          # wiki/ 下的变更 → 检查同名 .md
+            # ("wiki", ".md"),        # wiki/ 已预留为 LLM Wiki 资料，不监控
         ]
     
     def _load_state(self) -> dict:

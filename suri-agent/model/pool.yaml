@@ -1,0 +1,56 @@
+# 模型池配置
+# 业务配置：预设降级候选模型
+# 说明文档见 model.md
+
+model_pool:
+  version: "1.1"
+  default_model: "gpt-4o"
+
+models:
+  - id: gpt-4o
+    name: GPT-4o
+    type: chat
+    provider: openai/gpt-4o
+    fallback: gpt-4o-mini
+    status: active
+    priority: 1
+
+  - id: gpt-4o-mini
+    name: GPT-4o Mini
+    type: chat
+    provider: openai/gpt-4o-mini
+    fallback: claude-3-haiku
+    status: active
+    priority: 2
+
+  - id: claude-3-opus
+    name: Claude 3 Opus
+    type: chat
+    provider: anthropic/claude-3-opus
+    fallback: gpt-4o
+    status: active
+    priority: 3
+
+  - id: claude-3-haiku
+    name: Claude 3 Haiku
+    type: chat
+    provider: anthropic/claude-3-haiku
+    fallback: gpt-4o-mini
+    status: active
+    priority: 4
+
+  - id: dall-e-3
+    name: DALL-E 3
+    type: text2image
+    provider: openai/dall-e-3
+    fallback: stable-diffusion-xl
+    status: active
+    priority: 1
+
+  - id: stable-diffusion-xl
+    name: SD XL
+    type: text2image
+    provider: stability/sd-xl
+    fallback: dall-e-3
+    status: standby
+    priority: 2

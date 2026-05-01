@@ -16,12 +16,7 @@
 
 每个子目录下按天创建文件：
 ```
-logs/runtime/suri-2026-05-01.log
-logs/error/suri-2026-05-01.log
-logs/schedule/suri-2026-05-01.log
-logs/role/suri-2026-05-01.log
-logs/system/suri-2026-05-01.log
-```
+
 
 ## 日志格式
 

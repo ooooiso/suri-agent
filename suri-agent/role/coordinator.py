@@ -9,14 +9,22 @@
 """
 
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 class RoleCoordinator:
     """角色协同调度器"""
     
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, config=None):
         self.project_root = project_root
+        self.config = config  # ConfigService，用于动态读取角色 capabilities
+    
+    def _get_role_capabilities(self, role_id: str) -> List[str]:
+        """动态获取角色能力列表（从 Soul 文件）"""
+        if self.config:
+            return self.config.get_role_capabilities(role_id)
+        # 硬编码回退（仅用于无 config 的测试场景）
+        return []
     
     def assign_task(self, task: Dict[str, Any], 
                    available_roles: List[str]) -> Dict[str, Any]:
@@ -32,18 +40,11 @@ class RoleCoordinator:
         """
         task_type = task.get("type", "")
         
-        # 简单的角色-任务类型映射
-        role_capabilities = {
-            "suri": ["dispatch", "coordinate", "summarize"],
-            "suri-hr": ["role_creation", "capability_analysis"],
-            "suri-dev": ["code", "debug", "infrastructure"],
-        }
-        
         best_role = None
         best_score = 0
         
         for role in available_roles:
-            caps = role_capabilities.get(role, [])
+            caps = self._get_role_capabilities(role)
             score = sum(1 for c in caps if c in task_type.lower())
             if score > best_score:
                 best_score = score

@@ -152,7 +152,7 @@ class ChangeApprovalProcess(BaseProcess):
             "success": True,
             "step": "record",
             "actions": [
-                "git_admin 将变更追加到 wiki/docs/changelog.md",
+                "git_admin 将变更追加到 resources/sessions/changelog.md",
                 "变更报告永久保存于 resources/sessions/",
             ],
             "changelog_entry": {

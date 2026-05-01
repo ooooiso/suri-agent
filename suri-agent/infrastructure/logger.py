@@ -1,6 +1,8 @@
 """
 日志服务
 
+关联文档: suri-agent/infrastructure/infrastructure.md
+
 职责：
 - 统一管理 suri 平台的分类运行日志
 - 按模块分类存储于 logs/ 下各子目录
@@ -16,26 +18,48 @@
 """
 
 import sys
+import json
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 
-class LoggerService:
-    """日志服务"""
-    
-    LOG_BASE = "logs"
-    CATEGORIES = {
+def _load_categories(project_root: Path) -> Dict[str, str]:
+    """从 logs/categories.yaml 加载日志分类配置"""
+    yaml_path = project_root / "logs" / "categories.yaml"
+    if yaml_path.exists():
+        try:
+            import yaml
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                cats = {}
+                for key, val in data.get("categories", {}).items():
+                    if isinstance(val, dict):
+                        cats[key] = val.get("label", key)
+                    else:
+                        cats[key] = val
+                return cats
+        except Exception:
+            pass
+    # 回退到默认
+    return {
         "runtime": "程序运行",
         "error": "错误",
         "schedule": "调度",
         "role": "角色通信",
         "system": "系统",
     }
+
+
+class LoggerService:
+    """日志服务"""
+    
+    LOG_BASE = "logs"
     
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.log_base = project_root / self.LOG_BASE
+        self.CATEGORIES = _load_categories(project_root)
         self._ensure_dirs()
         self._current_date: Optional[str] = None
         
@@ -61,9 +85,8 @@ class LoggerService:
         except Exception as e:
             print(f"[日志写入失败] {e}", file=sys.stderr)
         
-        # 同时打印到控制台（信息及以上级别）
-        if level in ("信息", "警告", "错误"):
-            print(f"[日志-{self.CATEGORIES.get(category, category)}] {line.strip()}")
+        # 日志只写入文件，不打印到控制台（避免干扰终端对话）
+        # 如需调试，可直接查看 logs/ 目录下的分类日志文件
     
     # ========== 分类日志方法 ==========
     
@@ -165,6 +188,79 @@ class LoggerService:
         """记录文档同步事件"""
         files_str = f"，涉及 {files} 个文件" if files else ""
         self.system("信息", "文档同步", f"{action}{files_str}")
+    
+    def log_learning(self, role_id: str, event: str, detail: str = "") -> None:
+        """记录自学习事件"""
+        detail_str = f" | {detail}" if detail else ""
+        self.runtime("信息", "自学习", f"[{role_id}] {event}{detail_str}")
+    
+    def log_learning_error(self, role_id: str, error: str) -> None:
+        """记录自学习错误"""
+        self.error_log("错误", "自学习", f"[{role_id}] {error}")
+        self.runtime("错误", "自学习", f"[{role_id}] {error}")
+    
+    def _write_json_log(self, category: str, data: Dict[str, Any]) -> None:
+        """写入 JSON 结构化日志（便于统计角色解析）"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        log_dir = self.log_base / category
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"suri-{today}.jsonl"
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+        except Exception as e:
+            print(f"[JSON日志写入失败] {e}", file=sys.stderr)
+    
+    def log_token_usage(self, model_id: str, prompt_tokens: int, 
+                        completion_tokens: int, total_tokens: int, 
+                        task_hint: str = "", role_id: str = "") -> None:
+        """记录 Token 消耗（文本日志 + JSON 结构化日志）"""
+        hint_str = f" | 任务: {task_hint[:30]}" if task_hint else ""
+        role_str = f" | 角色: {role_id}" if role_id else ""
+        self.runtime(
+            "信息", "Token消耗",
+            f"模型: {model_id} | prompt={prompt_tokens} completion={completion_tokens} "
+            f"total={total_tokens}{hint_str}{role_str}"
+        )
+        # 同时写入结构化 JSON 日志
+        self._write_json_log("statistics", {
+            "event": "token_usage",
+            "timestamp": datetime.now().isoformat(),
+            "model_id": model_id,
+            "role_id": role_id,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "task_hint": task_hint
+        })
+    
+    def log_file_created(self, role_id: str, filepath: str, 
+                         file_type: str = "", size: int = 0) -> None:
+        """记录文件创建事件"""
+        self.runtime("信息", "文件创建", 
+                     f"角色: {role_id} | 文件: {filepath} | 类型: {file_type} | 大小: {size}B")
+        self._write_json_log("statistics", {
+            "event": "file_created",
+            "timestamp": datetime.now().isoformat(),
+            "role_id": role_id,
+            "filepath": filepath,
+            "file_type": file_type,
+            "size": size
+        })
+    
+    def log_task_completed(self, task_id: str, role_id: str, 
+                           status: str, duration_seconds: float = 0) -> None:
+        """记录任务完成事件"""
+        self.schedule("信息", "任务完成",
+                      f"任务: {task_id} | 角色: {role_id} | 状态: {status} | 耗时: {duration_seconds:.1f}s")
+        self._write_json_log("statistics", {
+            "event": "task_completed",
+            "timestamp": datetime.now().isoformat(),
+            "task_id": task_id,
+            "role_id": role_id,
+            "status": status,
+            "duration_seconds": duration_seconds
+        })
     
     def get_today_logs(self, category: str = "") -> Dict[str, Path]:
         """获取今日所有分类日志文件路径"""

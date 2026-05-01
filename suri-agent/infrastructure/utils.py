@@ -49,7 +49,8 @@ def scan_markdown_files(directory: Path, pattern: str = "**/*.md") -> Dict[str, 
             meta, body = load_markdown_file(file_path)
             results[str(rel_path)] = (meta, body)
         except Exception as e:
-            print(f"[WARN] 解析失败 {rel_path}: {e}")
+            # 解析失败，信息不打印到终端
+            pass
     return results
 
 

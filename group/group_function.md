@@ -1,7 +1,9 @@
 ---
 version: "1.0.0"
 description: 部门职能索引与角色能力速查，用于需求匹配与调度决策
-last_updated: 2026-04-30
+last_updated: 2026-05-01
+# ⚠️ 注意：roles 列表和角色能力速查表格可由程序自动生成
+# 运行 `python scripts/sync_group_function.py` 或输入 /sync 命令时选择同步角色索引
 
 departments:
   - id: central
@@ -10,9 +12,10 @@ departments:
     lead_role: suri
     members:
       - suri
-      - suri-hr
-      - suri-dev
-      - document-review
+      - suri_hr
+      - suri_dev
+      - suri_review
+      - suri_stats
     group_chat: "@suri_central_group"
     collaboration: []
 
@@ -36,7 +39,7 @@ roles:
   - id: suri-hr
     name: HR
     type: role_manager
-    keywords: [角色创建, 角色注销, 能力分析, 流程模板, 组织架构, 角色信息维护]
+    keywords: [创建角色, 创建, 角色, 组织架构, 部门, 部门设置, 技能分配, 技能, 角色管理, 人事, 权限]
     can:
       - 创建新角色并初始化目录结构
       - 分析角色应具备的能力
@@ -52,18 +55,50 @@ roles:
   - id: suri-dev
     name: Dev
     type: maintainer
-    keywords: [主程序维护, Bug修复, 代码升级, 性能优化, 框架维护, 基础设施]
+    keywords: [程序维护, Bug修复, Bug, 代码, 升级, 性能优化, 性能, 优化, 内存, 缓存, 重构, 函数, 崩溃, 出错, Python, 开发, 模块, API, 规则, 框架维护, 基础设施, 修复]
     can:
       - 维护 suri-agent/ 核心代码
       - 修复平台运行中的 Bug
       - 升级框架版本
       - 优化性能与稳定性
       - 确保核心流程正常运行
+      - 修改代码后同步更新对应模块文档
     cannot:
       - 处理业务需求
       - 修改角色配置
       - 操作受保护的外部配置
       - 介入业务角色的具体任务
+      - 跳过文档同步直接提交代码变更
+
+  - id: document-review
+    name: 文档审核
+    type: director
+    keywords: [审核, 文档审核, 文档, 代码审查, 变更审计, 变更, 审计, 质量检查, 质量, 检查, 风险, 验证, 评估, 格式]
+    can:
+      - 审核代码/文档变更的一致性和准确性
+      - 评估变更风险并提供审计意见
+      - 检查质量标准和合规性
+      - 生成变更审计报告
+    cannot:
+      - 直接修改被审核的代码或文档
+      - 跳过审核流程强制通过变更
+      - 替代业务角色做出技术决策
+
+  - id: analyst
+    name: 统计分析师
+    type: analyst
+    keywords: [统计, 分析, 报告, 消耗, token, 用量, 日报, 周报, 月报, 文件, 任务, 监控]
+    can:
+      - 读取结构化日志并聚合统计
+      - 按角色/模型/时间维度统计 Token 消耗
+      - 统计文件创建数量和类型分布
+      - 统计任务完成率和平均耗时
+      - 生成日报/周报/月报
+    cannot:
+      - 修改日志或数据库
+      - 处理业务需求
+      - 替代业务角色工作
+
 ---
 
 # 角色能力速查
@@ -74,6 +109,17 @@ roles:
 | suri-hr | 角色管理 | 角色创建、能力分析、流程模板、组织架构维护 | 需要新建/修改/注销角色时 |
 | suri-dev | 程序维护 | Bug修复、代码升级、性能优化、框架维护 | 平台技术问题、升级需求 |
 | document-review | 文档审核 | 文档一致性审查、变更确认、更新汇报 | 新增/修改模块后需要更新文档时 |
+| analyst | 统计分析师 | Token统计、文件统计、任务统计、报告生成 | 用户询问消耗、统计、报告时 |
+
+## 快速匹配指南
+
+**用户需求包含以下关键词时，调度给对应角色：**
+
+- "新建角色" / "创建角色" / "需要XX能力" → **suri-hr**
+- "平台报错" / "Bug" / "升级" / "性能问题" → **suri-dev**
+- "文档更新" / "审核变更" / "记录日志" / "同步文档" → **document-review**
+- "统计" / "消耗" / "Token" / "报告" / "用量" / "日报" → **analyst**
+- 其他所有业务需求 → **suri**（由 suri 进一步分派）
 
 ## 快速匹配指南
 

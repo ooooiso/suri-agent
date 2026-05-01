@@ -1,0 +1,63 @@
+{
+  "_comment": "工具注册表 — 业务配置（单一来源）。新增工具只需修改此文件。对应的说明文档见 tool_registry.md",
+  "tools": [
+    {
+      "tool_id": "file_read",
+      "file": "tool_executor.py",
+      "description": "读取文件内容",
+      "permission": "public"
+    },
+    {
+      "tool_id": "file_write",
+      "file": "tool_executor.py",
+      "description": "写入文件（需审批令牌）",
+      "permission": "maintainer"
+    },
+    {
+      "tool_id": "file_list",
+      "file": "tool_executor.py",
+      "description": "列出目录内容",
+      "permission": "public"
+    },
+    {
+      "tool_id": "shell_exec",
+      "file": "tool_executor.py",
+      "description": "执行 shell 命令",
+      "permission": "suri-dev"
+    },
+    {
+      "tool_id": "db_query",
+      "file": "memory.py",
+      "description": "查询角色数据库",
+      "permission": "public"
+    },
+    {
+      "tool_id": "db_insert",
+      "file": "memory.py",
+      "description": "插入数据到角色数据库",
+      "permission": "public"
+    },
+    {
+      "tool_id": "model_manager",
+      "file": "tools/model_manager/scripts/main.py",
+      "description": "模型管理：列出/切换/分类/生成文档",
+      "permission": "public"
+    },
+    {
+      "tool_id": "web_fetch",
+      "file": "tools/web_fetch/scripts/main.py",
+      "description": "网页获取：获取 URL 内容/搜索关键词",
+      "permission": "public"
+    }
+  ],
+  "permission_levels": {
+    "public": {
+      "description": "所有角色自动可用",
+      "note": "无需在角色 Soul 中声明"
+    },
+    "maintainer": {
+      "description": "maintainer 类型角色自动可用",
+      "note": "按 Soul 中 type: maintainer 自动授予"
+    }
+  }
+}

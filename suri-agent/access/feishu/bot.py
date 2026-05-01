@@ -17,7 +17,7 @@ class FeishuAdapter(BaseCommAdapter):
     """
     飞书适配器
     
-    当前为预留实现，配置见 wiki/communication/feishu.md
+    当前为预留实现，配置见 suri-agent/access/telegram/groups.yaml（通用通信配置）
     """
     
     async def connect(self) -> bool:

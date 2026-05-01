@@ -284,7 +284,7 @@ def main():
     
     project_root = Path(args.root).resolve()
     if not (project_root / 'suri').exists():
-        print(f"[ui_gateway] 警告: {project_root} 下未找到 wiki/ 目录")
+        print(f"[ui_gateway] 警告: {project_root} 下未找到 suri 主程序文件")
     
     server = UIGatewayServer(
         project_root=project_root,
