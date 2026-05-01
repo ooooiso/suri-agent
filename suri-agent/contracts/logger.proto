@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package suri.logger;
+
+import "common.proto";
+
+// 日志中心服务接口
+
+service Logger {
+  rpc LogEvent(LogEntry) returns (Empty);
+  rpc LogTokenUsage(TokenUsage) returns (Empty);
+  rpc LogToolCall(ToolCallRecord) returns (Empty);
+  rpc GetTodayLogs(LogCategory) returns (LogFileList);
+  rpc QueryLogs(LogQuery) returns (LogEntryList);
+}
+
+message LogEntry {
+  string category = 1;     // "runtime" | "error" | "schedule" | "role" | "system" | "statistics" | "tool_calls"
+  string level = 2;        // "DEBUG" | "INFO" | "WARNING" | "ERROR"
+  string message = 3;
+  string role_id = 4;
+  string task_id = 5;
+  map<string, string> metadata = 6;
+  int64 timestamp = 7;
+}
+
+message TokenUsage {
+  string role_id = 1;
+  string model = 2;
+  int32 prompt_tokens = 3;
+  int32 completion_tokens = 4;
+  int32 total_tokens = 5;
+  int64 timestamp = 6;
+}
+
+message ToolCallRecord {
+  string tool_id = 1;
+  string caller_role = 2;
+  string params = 3;
+  string result = 4;
+  int32 execution_time_ms = 5;
+  int64 timestamp = 6;
+}
+
+message LogCategory {
+  string category = 1;
+}
+
+message LogFileList {
+  repeated string paths = 1;
+}
+
+message LogQuery {
+  string category = 1;
+  string level = 2;
+  string role_id = 3;
+  string keyword = 4;
+  int64 start_time = 5;
+  int64 end_time = 6;
+  int32 limit = 7;
+}
+
+message LogEntryList {
+  repeated LogEntry entries = 1;
+}

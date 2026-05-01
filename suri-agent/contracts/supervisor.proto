@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package suri.supervisor;
+
+import "common.proto";
+
+// Supervisor 管理接口
+
+service Supervisor {
+  rpc StartService(ServiceRequest) returns (ServiceStatus);
+  rpc StopService(ServiceRequest) returns (ServiceStatus);
+  rpc RestartService(ServiceRequest) returns (ServiceStatus);
+  rpc ReloadService(ReloadRequest) returns (ServiceStatus);
+  rpc GetServiceStatus(ServiceRequest) returns (ServiceStatus);
+  rpc ListServices(Empty) returns (ServiceList);
+  rpc HealthCheckAll(Empty) returns (HealthMap);
+}
+
+message ServiceRequest {
+  string service_name = 1;
+}
+
+message ReloadRequest {
+  string service_name = 1;
+  repeated string changed_files = 2;
+  string reason = 3;
+  string operator = 4;
+}
+
+message ServiceStatus {
+  string name = 1;
+  string state = 2;          // "running" | "stopped" | "restarting"
+  int32 pid = 3;
+  string uptime = 4;
+  string version = 5;
+}
+
+message ServiceList {
+  repeated ServiceStatus services = 1;
+}
+
+message HealthMap {
+  map<string, common.HealthCheckResponse> health = 1;
+}

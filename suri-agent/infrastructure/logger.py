@@ -48,6 +48,8 @@ def _load_categories(project_root: Path) -> Dict[str, str]:
         "schedule": "调度",
         "role": "角色通信",
         "system": "系统",
+        "statistics": "统计",
+        "tool_calls": "工具调用",
     }
 
 
@@ -262,12 +264,23 @@ class LoggerService:
             "duration_seconds": duration_seconds
         })
     
+    def log_tool_call(self, caller_role: str, tool_id: str,
+                       params: Dict[str, Any], success: bool) -> None:
+        """记录工具调用（统一入口，替代 ToolService 独立写文件）"""
+        self._write(
+            "tool_calls", "信息", "工具调用",
+            f"role={caller_role} tool={tool_id} params={str(params)[:200]} success={success}"
+        )
+    
     def get_today_logs(self, category: str = "") -> Dict[str, Path]:
         """获取今日所有分类日志文件路径"""
         today = datetime.now().strftime("%Y-%m-%d")
         if category and category in self.CATEGORIES:
-            return {category: self.log_base / category / f"suri-{today}.log"}
-        return {
-            cat: self.log_base / cat / f"suri-{today}.log"
-            for cat in self.CATEGORIES
-        }
+            # statistics 使用 .jsonl 后缀
+            suffix = "jsonl" if category == "statistics" else "log"
+            return {category: self.log_base / category / f"suri-{today}.{suffix}"}
+        result = {}
+        for cat in self.CATEGORIES:
+            suffix = "jsonl" if cat == "statistics" else "log"
+            result[cat] = self.log_base / cat / f"suri-{today}.{suffix}"
+        return result

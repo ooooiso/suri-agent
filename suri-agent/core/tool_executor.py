@@ -109,28 +109,16 @@ class ToolService:
         记录工具调用历史
         
         供角色复盘时分析工具使用模式，形成技能。
-        记录写入 logs/tool_calls/ 目录下的日期日志文件。
+        统一通过 LoggerService 写入 logs/tool_calls/ 目录。
         """
-        from datetime import datetime
-        
         if not caller_role:
             return
         
-        log_dir = self.project_root / "logs" / "tool_calls"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        today = datetime.now().strftime("%Y-%m-%d")
-        log_file = log_dir / f"tool_calls_{today}.log"
-        
-        now = datetime.now().isoformat()
-        line = (
-            f"[{now}] role={caller_role} tool={tool_id} "
-            f"params={str(params)[:200]} success={success}\n"
-        )
-        
+        # 统一使用 LoggerService 记录（避免日志系统分裂）
+        from infrastructure.logger import LoggerService
         try:
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(line)
+            logger = LoggerService(self.project_root)
+            logger.log_tool_call(caller_role, tool_id, params, success)
         except Exception:
             pass
     

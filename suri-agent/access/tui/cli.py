@@ -627,18 +627,20 @@ class SuriTerminal:
             for cat, path in logs.items():
                 if path.exists():
                     lines = path.read_text(encoding="utf-8").strip().split("\n")
-                    count = len(lines) if lines[0] else 0
+                    count = len(lines) if lines and lines[0] else 0
                     total += count
-                    print(f"  • [{cat:8s}] {path} ({count} 条)")
+                    print(f"  • [{cat:12s}] {path} ({count} 条)")
                 else:
-                    print(f"  • [{cat:8s}] {path} (0 条)")
+                    print(f"  • [{cat:12s}] {path} (0 条)")
             print(f"\n   总计: {total} 条记录")
             print("\n   可用子命令:")
-            print("     /logs runtime  — 查看运行日志")
-            print("     /logs error    — 查看错误日志")
-            print("     /logs schedule — 查看调度日志")
-            print("     /logs role     — 查看角色通信日志")
-            print("     /logs system   — 查看系统日志\n")
+            print("     /logs runtime     — 查看运行日志")
+            print("     /logs error       — 查看错误日志")
+            print("     /logs schedule    — 查看调度日志")
+            print("     /logs role        — 查看角色通信日志")
+            print("     /logs system      — 查看系统日志")
+            print("     /logs statistics  — 查看统计日志(JSONL)")
+            print("     /logs tool_calls  — 查看工具调用日志\n")
             return True
             
         if text.startswith('/logs '):

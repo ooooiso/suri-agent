@@ -1,57 +1,35 @@
-# suri 运行时生成文件 — 不应提交到 git
-
-# 环境变量（首次运行引导生成）
-.env
-
-# 运行时配置（首次运行生成）
-config.yaml
-
-# 模型配置（/model add 生成）
-model_config.json
-
-# 文档同步规则状态（自动持久化）
-.doc_sync_rule_state.json
-
-# 日志文件（按天自动生成）
-logs/*/*.log
-
-# 角色记忆数据库（运行时生成）
-group/**/memories/*.db
-
-# 运行时资源
-resources/cache/*
-resources/sessions/*
-resources/temp/*
-
-# 后台进程文件
-logs/system/.suri.pid
-
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
 
-# 运行时数据（不应提交）
-.kimi/
-group/**/memories/*.db-shm
-group/**/memories/*.db-wal
-suri-agent/state/
-suri-agent/logs/
-logs/categories.yaml
-logs/statistics/
-resources/archives/
-resources/exports/
-resources/uploads/
+# 数据与日志（本地生成）
+data/*
+!data/.gitkeep
+logs/*
+!logs/categories.yaml
+workspace/*
+!workspace/.gitkeep
 
-# 测试运行时生成的角色记忆文件
-group/**/memories/*test_topic_*.md
-group/**/memories/2026*.md
+# 环境
+.env
+.venv/
 
-# 角色运行时经验文件（自动生成）
-group/**/memories/insights/*.md
-group/**/memories/patterns/*.md
-group/**/memories/*.md
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# 审计报告（运行时生成）
-group/**/reports/2026*.md
-group/**/reports/*_audit_*.md
+# macOS
+.DS_Store
+
+# 数据库
+*.db
+*.db-shm
+*.db-wal

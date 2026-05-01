@@ -1,0 +1,25 @@
+# 日志分类配置 — 单一来源
+# 新增分类只需修改此文件，logger.py 自动加载
+
+categories:
+  runtime:
+    label: "程序运行"
+    description: "用户交互、模型调用、命令执行"
+  error:
+    label: "错误"
+    description: "异常、崩溃、API 失败"
+  schedule:
+    label: "调度"
+    description: "任务创建、角色间调度"
+  role:
+    label: "角色通信"
+    description: "角色间消息"
+  system:
+    label: "系统"
+    description: "启动、关闭、代码变更、重载"
+  statistics:
+    label: "统计"
+    description: "Token 消耗、文件创建、任务完成等结构化 JSON 日志"
+  tool_calls:
+    label: "工具调用"
+    description: "各角色调用工具的参数、结果、成功率"

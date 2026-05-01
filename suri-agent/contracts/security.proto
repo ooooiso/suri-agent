@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package suri.security;
+
+import "common.proto";
+
+// 安全与文件服务接口
+
+service Security {
+  // 权限校验
+  rpc PreFileChangeCheck(FileChangeRequest) returns (PermissionResult);
+  rpc ValidateApprovalToken(Token) returns (ValidationResult);
+  rpc IssueApprovalToken(ApprovalRequest) returns (ApprovalToken);
+  rpc RegisterApproval(ApprovalRecord) returns (Empty);
+  
+  // 文件操作
+  rpc ReadFile(FilePath) returns (FileContent);
+  rpc WriteFile(WriteRequest) returns (WriteResult);
+  rpc DeleteFile(FilePath) returns (Empty);
+  rpc ListDirectory(Path) returns (DirectoryListing);
+  rpc Mkdir(Path) returns (Empty);
+}
+
+message FileChangeRequest {
+  string operator = 1;
+  string path = 2;
+  string action = 3;       // "read" | "write" | "delete"
+  string approval_token = 4;
+}
+
+message PermissionResult {
+  bool allowed = 1;
+  string reason = 2;
+  bool requires_approval = 3;
+}
+
+message Token {
+  string token = 1;
+}
+
+message ValidationResult {
+  bool valid = 1;
+  string operator = 2;
+  repeated string allowed_paths = 3;
+  int64 expires_at = 4;
+}
+
+message ApprovalRequest {
+  string operator = 1;
+  string action = 2;
+  repeated string paths = 3;
+  string reason = 4;
+}
+
+message ApprovalToken {
+  string token = 1;
+  int64 expires_at = 2;
+}
+
+message ApprovalRecord {
+  string token = 1;
+  string operator = 2;
+  string status = 3;       // "pending" | "approved" | "rejected"
+  string approved_by = 4;
+  int64 created_at = 5;
+}
+
+message FilePath {
+  string path = 1;
+}
+
+message FileContent {
+  string path = 1;
+  bytes content = 2;
+  int64 mtime = 3;
+}
+
+message WriteRequest {
+  string path = 1;
+  bytes content = 2;
+  string operator = 3;
+  string approval_token = 4;
+}
+
+message WriteResult {
+  string path = 1;
+  int32 size = 2;
+  bool created = 3;
+}
+
+message Path {
+  string path = 1;
+}
+
+message DirectoryListing {
+  string path = 1;
+  repeated string files = 2;
+  repeated string directories = 3;
+}

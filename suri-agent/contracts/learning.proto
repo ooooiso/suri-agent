@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package suri.learning;
+
+import "common.proto";
+
+// 进化引擎服务接口
+
+service Learning {
+  rpc TriggerLearning(TaskId) returns (Empty);
+  rpc GetRoleInsights(RoleId) returns (InsightList);
+  rpc RequestSoulUpdate(SoulUpdateRequest) returns (ApprovalResponse);
+  rpc RunDailyReview(Empty) returns (DailyReviewReport);
+}
+
+message TaskId { string id = 1; }
+message RoleId { string id = 1; }
+
+message InsightList {
+  repeated Insight insights = 1;
+}
+
+message Insight {
+  string id = 1;
+  string role_id = 2;
+  string category = 3;
+  string title = 4;
+  string content = 5;
+  float confidence = 6;
+}
+
+message SoulUpdateRequest {
+  string role_id = 1;
+  string suggested_changes = 2;
+  string reason = 3;
+}
+
+message ApprovalResponse {
+  string approval_id = 1;
+  string status = 2;
+}
+
+message DailyReviewReport {
+  int32 total_tasks = 1;
+  int32 success_count = 2;
+  int32 failure_count = 3;
+  int32 model_calls = 4;
+  string summary = 5;
+}

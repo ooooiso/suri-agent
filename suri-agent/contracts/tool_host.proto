@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package suri.tool_host;
+
+import "common.proto";
+
+// 工具运行时服务接口
+
+service ToolHost {
+  rpc ExecuteTool(ToolExecutionRequest) returns (ToolExecutionResult);
+  rpc ListAvailableTools(RoleId) returns (ToolList);
+  rpc GetToolInfo(ToolId) returns (ToolInfo);
+  rpc ValidateToolParams(ToolIdWithParams) returns (ValidationResult);
+  rpc RegisterMCPService(MCPServiceConfig) returns (RegistrationResult);
+}
+
+message RoleId { string id = 1; }
+message ToolId { string id = 1; }
+
+message ToolExecutionRequest {
+  string tool_id = 1;
+  string caller_role = 2;
+  map<string, string> params = 3;
+  string approval_token = 4;
+}
+
+message ToolExecutionResult {
+  string tool_id = 1;
+  bool success = 2;
+  string output = 3;
+  string error = 4;
+  int32 execution_time_ms = 5;
+}
+
+message ToolList {
+  repeated ToolInfo tools = 1;
+}
+
+message ToolInfo {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string permission = 4;    // "public" | "maintainer" | "role:xxx"
+  repeated ParamDef params = 5;
+}
+
+message ParamDef {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+  string description = 4;
+}
+
+message ToolIdWithParams {
+  string tool_id = 1;
+  map<string, string> params = 2;
+}
+
+message ValidationResult {
+  bool valid = 1;
+  repeated string errors = 2;
+}
+
+message MCPServiceConfig {
+  string service_id = 1;
+  string endpoint = 2;
+  repeated string tools = 3;
+}
+
+message RegistrationResult {
+  bool success = 1;
+  string message = 2;
+}
