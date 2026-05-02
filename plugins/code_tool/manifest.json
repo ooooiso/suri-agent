@@ -1,0 +1,19 @@
+{
+  "manifest_version": "1.0",
+  "name": "code_tool",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "tool",
+  "description": "代码读写执行工具（迭代 1：只读）",
+  "author": "",
+  "permissions": ["tool.call"],
+  "event_subscriptions": ["tool.call"],
+  "fs_permissions": {
+    "read": ["suri-agent/", "roles/", "plugins/", "prd/", "shared/", "tests/"],
+    "write": []
+  },
+  "runtime_mutable": true,
+  "dependencies": ["suri_core", "security_service"],
+  "config_schema": {}
+}

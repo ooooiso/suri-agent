@@ -1,0 +1,21 @@
+{
+  "manifest_version": "1.0",
+  "name": "access",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "integration",
+  "description": "终端 CLI 与 Telegram Bot 访问通道",
+  "author": "",
+  "permissions": ["system.*", "user.command"],
+  "event_subscriptions": ["*"],
+  "fs_permissions": {},
+  "runtime_mutable": true,
+  "dependencies": ["suri_core", "config_service"],
+  "config_schema": {
+    "access": {
+      "enable_telegram": { "type": "boolean", "default": false },
+      "telegram_token_env": { "type": "string", "default": "SURI_TELEGRAM_TOKEN" }
+    }
+  }
+}
