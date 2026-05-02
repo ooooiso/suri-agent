@@ -241,6 +241,24 @@ code_tool:
 
 ---
 
+## 内部模块结构
+
+```
+code_tool/
+├── __init__.py              # 导出 CodeToolPlugin
+├── manifest.json            # 插件元数据
+├── plugin.py                # 插件主入口，事件路由
+├── reader.py                # read_file 实现（迭代 1）
+├── explorer.py              # list_dir 实现（迭代 1）
+├── search.py                # grep 实现（迭代 1）
+├── stats.py                 # stat_project 实现（迭代 1）
+├── writer.py                # write_file / append_file（迭代 2 解锁）
+├── test_runner.py           # execute_test（迭代 2 解锁）
+└── executor.py              # execute_command（迭代 2 解锁）
+```
+
+**设计原则**：将各操作拆分为独立模块，便于单独测试和迭代解锁。`plugin.py` 仅负责事件订阅和参数分发，业务逻辑在各模块中实现。
+
 ## 生命周期
 
 1. `init()` → 加载路径白名单配置
