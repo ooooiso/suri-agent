@@ -1,8 +1,0 @@
-# suri 运行时配置
-# 程序启动时读取，运行中可热重载
-
-platform:
-  name: Suri
-  version: "1.0.0"
-  mode: production      # development | production
-  debug: false

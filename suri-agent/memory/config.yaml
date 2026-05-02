@@ -1,8 +1,0 @@
-# 记忆策略配置
-# 业务配置
-# 说明文档见 memory.md
-
-memory_config:
-  version: "1.0"
-  retention_days: 90
-  archive_threshold: 1000

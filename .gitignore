@@ -1,35 +1,22 @@
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-*.egg-info/
-dist/
-build/
-
-# 数据与日志（本地生成）
-data/*
-!data/.gitkeep
-logs/*
-!logs/categories.yaml
-workspace/*
-!workspace/.gitkeep
-
-# 环境
 .env
 .venv/
+venv/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Logs
+*.log
 
-# macOS
-.DS_Store
-
-# 数据库
-*.db
-*.db-shm
-*.db-wal
+# Temp
+.temp/
+tmp/
