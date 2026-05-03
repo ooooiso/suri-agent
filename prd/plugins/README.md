@@ -5,67 +5,79 @@
 > **核心原则**：
 > 1. 一切功能基于插件调用，无硬编码耦合
 > 2. 一切任务基于角色协同，和程序无关
-> 3. **所有插件（包括 suri_core）概念统一，无特殊分类**
+> 3. **所有插件概念统一，按功能分 6 层**
 
-## 插件清单（20 个）
+## 插件清单（23 个）
 
-### 内核层
+```
+23 个插件分 6 层：
+├─ 内核层（1）    核心 ↪  core/
+├─ 基础服务层（3） 服务 ↪  service/
+├─ 执行层（6）    执行 ↪  execution/
+├─ 能力层（8）    能力 ↪  capability/
+├─ 接入层（1）    接入 ↪  access/
+└─ 扩展层（5）    扩展 ↪  extension/
+```
 
-| 插件 | 文件 | 职责 | 状态 |
-|------|------|------|------|
-| **suri_core** | `suri_core.md` | **内核插件**。EventBus（含分发）+ PluginManager。启动时自举注册 | 核心 |
+### 内核层 `core/`
 
-### 基础服务层
+| 插件 | 文件 | 职责 |
+|------|------|------|
+| **suri_core** | `core/suri_core.md` | 内核核心。EventBus + PluginManager。自举注册 |
 
-| 插件 | 文件 | 职责 | 状态 |
-|------|------|------|------|
-| config_service | `config_service.md` | 统一配置中心 | 核心 |
-| log_service | `log_service.md` | 分级日志、分类归档 | 核心 |
-| security_service | `security_service.md` | 权限校验、审批流程 | 核心 |
+### 基础服务层 `service/`
 
-### 执行层（新增）
+| 插件 | 文件 | 职责 |
+|------|------|------|
+| config_service | `service/config_service.md` | 统一配置中心 |
+| log_service | `service/log_service.md` | 分级日志、分类归档 |
+| security_service | `service/security_service.md` | 权限校验、审批流程 |
 
-| 插件 | 文件 | 职责 | 优先级 |
-|------|------|------|--------|
-| **task_scheduler** | `task_scheduler.md` | 任务优先级队列、并发控制、超时重试、LLM 响应等待 | **P0** |
-| **task_planner** | `task_planner.md` | 任务分解、DAG 依赖管理、预设模板、LLM 辅助规划 | **P0** |
-| **agent_registry** | `agent_registry.md` | Agent 生命周期、子 Agent、状态跟踪、进度查询、父子关系 | **P0** |
-| **role_comm** | `role_comm.md` | 角色间点对点/广播消息、权限规则、持久化队列、留存策略 | **P0** |
-| **interrupt_handler** | `interrupt_handler.md` | 受阻原因分类、用户建议生成、升级通道 | **P1** |
+### 执行层 `execution/`
 
-### 能力层
+| 插件 | 文件 | 职责 |
+|------|------|------|
+| task_scheduler | `execution/task_scheduler.md` | 任务优先级队列、并发控制、超时重试 |
+| task_planner | `execution/task_planner.md` | 任务分解、DAG 依赖管理、预设模板 |
+| agent_registry | `execution/agent_registry.md` | Agent 生命周期、状态跟踪、进度查询 |
+| interrupt_handler | `execution/interrupt_handler.md` | 中断分类、自动重试、用户决策 |
+| role_comm | `execution/role_comm.md` | 角色间通信、持久化队列 |
+| code_tool | `execution/code_tool.md` | 文件读写、搜索、统计 |
 
-| 插件 | 文件 | 职责 | 状态 |
-|------|------|------|------|
-| llm_gateway | `llm_gateway.md` | 大模型统一网关 | 必备 |
-| memory_service | `memory_service.md` | 角色级 SQLite 记忆存储 | 必备 |
-| role_manager | `role_manager.md` | 角色生命周期、Soul 管理 | 必备 |
-| role_learner | `role_learner.md` | 角色自学习 + ProgramLearner 全局分析 | 成长 |
-| mcp_framework | `mcp_framework.md` | MCP 协议 + 工具注册中心 + 内置服务 | 必备 |
-| upgrade_manager | `upgrade_manager.md` | 升级报告状态机、闭环检查、Finding/UpgradeReport 模型 | **P1** |
+### 能力层 `capability/`
 
-### 接入层
+| 插件 | 文件 | 职责 |
+|------|------|------|
+| llm_gateway | `capability/llm_gateway.md` | 大模型统一网关 |
+| memory_service | `capability/memory_service.md` | 角色级 SQLite 记忆存储 |
+| wiki_service | `capability/wiki_service.md` | ⭐ Wiki 知识库(LLM驱动) |
+| role_manager | `capability/role_manager.md` | 角色生命周期、Soul 管理 |
+| role_learner | `capability/role_learner.md` | 角色自学习、技能检测 |
+| mcp_framework | `capability/mcp_framework.md` | MCP 协议、工具注册发现 |
+| upgrade_manager | `capability/upgrade_manager.md` | 升级报告状态机、回滚管理 |
 
-| 插件 | 文件 | 职责 | 状态 |
-|------|------|------|------|
-| access | `access.md` | 统一接入（CLI/Web/Telegram/Lark/API） | 默认启用 |
+### 接入层 `access/`
 
-### 扩展层
+| 组件 | 文件 | 职责 |
+|------|------|------|
+| **session-hub** | `access/session-hub.md` | ★ 会话中枢。会话管理、统一协议、事件路由、通道注册/发现、能力协商 |
+| **CLI 通道** | `access/channels/cli.md` | 终端交互通道 |
+| **Telegram 通道** | `access/channels/telegram.md` | Telegram Bot 通道 |
+| **Web 通道** | `access/channels/web.md` | Web 端交互通道（占位） |
+| **桌面端通道** | `access/channels/desktop.md` | 桌面端原生通道（占位） |
+| config_editor | `access/config_editor.md` | 配置编辑器 |
+| wizard | `access/wizard.md` | 引导式配置器 |
 
-| 插件 | 文件 | 职责 | 状态 |
-|------|------|------|------|
-| cron_service | `cron_service.md` | 定时触发事件（只触发，不执行） | 运维 |
-| hooks_service | `hooks_service.md` | 事件钩子、拦截扩展 | 扩展 |
-| test_framework | `test_framework.md` | 自动化测试框架 | 质量 |
-| doc_sync | `doc_sync.md` | 文件变更监控、LLM 生成文档更新建议、用户确认写入 | **P2** |
+### 扩展层 `extension/`
 
-### 工具层
+| 插件 | 文件 | 职责 |
+|------|------|------|
+| test_framework | `extension/test_framework.md` | 自动化测试框架 |
+| cron_service | `extension/cron_service.md` | 定时触发事件 |
+| hooks_service | `extension/hooks_service.md` | 事件钩子、拦截扩展 |
+| doc_sync | `extension/doc_sync.md` | 文档同步、代码变更监控 |
+| monitor | `extension/monitor.md` | ⭐ 系统监控与运维 |
 
-| 插件 | 文件 | 职责 | 状态 |
-|------|------|------|------|
-| code_tool | `code_tool.md` | 安全文件读写、代码搜索、测试执行 | **P1** |
-
----
 
 ## 架构原则
 
@@ -83,16 +95,12 @@
                 ┌───────────────┼───────────────┐
                 ▼               ▼               ▼
           ┌─────────┐     ┌─────────┐     ┌─────────┐
-          │  suri   │     │suri_dev │     │suri_hr  │
-          │（调度）  │     │（开发）  │     │（人事）  │
+          │  suri   │     │ 角色 A  │     │ 角色 B  │
+          │（调度）  │     │(Agent)  │     │(Agent)  │
           └────┬────┘     └────┬────┘     └────┬────┘
                │               │               │
                ▼               ▼               ▼
-          调用插件能力     调用插件能力     调用插件能力
-          llm_gateway     mcp_framework   role_manager
-          memory_service  security_service
-          task_scheduler  task_planner    agent_registry
-          role_comm       interrupt_handler
+          调用插件能力      调用插件能力       调用插件能力
 ```
 
 **框架（程序）只提供**：
@@ -100,18 +108,18 @@
 - 插件生命周期管理
 - 配置/日志/安全等基础服务
 
-**角色负责**：
-- 接收用户输入
-- 分析需求
-- 调用插件能力（包括执行层插件）
-- 分派子任务给其他角色
-- 汇总结果返回用户
+**suri 角色负责**：
+- 调度 — 将任务分配给合适的角色
+- 角色管理 — 创建/删除角色
+- 系统维护 — 管理插件和配置
+- 升级自身 — 申请增加新技能
 
-**项目组模式（复杂项目）**：
-- suri 只在项目组创建和缺少角色时介入
-- 项目总监（项目附带角色）负责项目群内日常调度
-- 用户直接在项目 Telegram 群 @项目总监 或 @实现角色 交互
-- 项目总监调用 task_planner / task_scheduler / agent_registry 完成调度
+**普通角色（Agent）负责**：
+- 接收任务
+- 分析需求
+- 调用插件能力执行
+- 自学、自增技能
+- 与其他角色协作
 
 ### 2. 插件被动 — 能力提供者，不主动决策
 
@@ -120,7 +128,7 @@
 | llm_gateway | 接收 `llm.request` 事件，返回模型响应 | 主动决定何时调用模型 |
 | memory_service | 接收读写请求，操作 SQLite | 主动分析记忆内容 |
 | mcp_framework | 接收 `tool.call` 事件，执行工具 | 主动决定调用哪个工具 |
-| role_learner | 被角色调用，分析该角色记忆 | 主动扫描所有角色记忆 |
+| role_learner | 被事件触发，分析该角色记忆 | 主动扫描所有角色记忆 |
 | cron_service | 按时触发 `cron.*` 事件 | 定义事件内容或执行任务 |
 | task_scheduler | 接收调度请求，按优先级执行 | 主动决定任务优先级 |
 | task_planner | 被调用时生成任务规划 | 主动分解未请求的任务 |
@@ -254,29 +262,122 @@ suri_core（内核插件，自举注册）
 | `agent.blocked` | agent_registry | log_service / interrupt_handler | Agent 受阻 |
 | `role.message_received` | role_comm | receiver 角色 | 新消息到达 |
 | `role.skill_suggested` | role_learner | role_manager | 技能建议 |
-| `cron.{rule_id}` | cron_service | 角色 | 定时事件（由角色处理） |
+| `role.skill_registered` | role_manager | template_updater | 技能注册 |
+| `cron.{rule_id}` | cron_service | 角色 | 定时事件 |
 | `error.*` | 任意插件 | log_service | 错误事件 |
 | `test.completed` | test_framework | log_service | 测试完成 |
-| `plugin.upgrade_proposed` | 任意插件 | suri_core / suri 角色 | 插件升级方案 |
 | `upgrade.report_saved` | upgrade_manager | log_service | 报告已保存 |
 | `upgrade.reports_pending` | upgrade_manager | suri 角色 | 有待处理报告 |
 | `interrupt.escalated` | interrupt_handler | role_comm / 目标角色 | 中断已升级 |
 | `doc_sync.suggestion_created` | doc_sync | access / suri 角色 | 文档更新建议 |
-
-**注意**：所有 `task.*`、`llm.*`、`tool.*`、`agent.*` 事件的发布者和消费者都是**角色或插件能力层**，suri_core 作为框架不发布也不消费这些业务事件。
+| `role_manager.templates_updated` | template_updater | role_manager | 模板已更新 |
+| `task_planner.templates_updated` | template_updater | task_planner | 模板已更新 |
 
 ---
 
-## 开发规范
+## 六、每层插件暴露了什么（可扫码表）
+
+> 以下汇总每层所有插件在 manifest.json 中声明的暴露能力。事件 = 发布的事件类型，工具 = 暴露的 MCP 工具，命令 = CLI 命令。
+
+### 内核层
+
+| 插件 | 暴露事件 | 暴露工具 | 命令 |
+|------|---------|---------|------|
+| **suri_core** | `system.start`, `system.shutdown` | 无 | 无 |
+
+### 基础服务层
+
+| 插件 | 暴露事件 | 暴露工具 | 命令 |
+|------|---------|---------|------|
+| **config_service** | `system.config_changed` | 配置读写 | 无 |
+| **log_service** | 无（纯服务插件） | 日志查询、日志归档 | 无 |
+| **security_service** | 无 | 权限校验、代码扫描 | 无 |
+
+### 执行层
+
+| 插件 | 暴露事件 | 暴露工具 | 命令 |
+|------|---------|---------|------|
+| **task_scheduler** | `task.queued`, `task.started`, `task.completed`, `task.failed`, `task.timeout`, `task.cancelled` | 任务调度 | 无 |
+| **task_planner** | `task.planned`, `task.plan_updated` | 任务分解、依赖管理 | 无 |
+| **agent_registry** | `agent.created`, `agent.status_changed`, `agent.completed`, `agent.blocked` | Agent CRUD、状态查询 | 无 |
+| **interrupt_handler** | `interrupt.handled`, `interrupt.escalated` | 中断处理 | 无 |
+| **role_comm** | `role.message_received`, `role.message_delivered`, `role.message_rejected` | 消息发送/广播/查询 | 无 |
+| **code_tool** | `tool.result`, `error.tool` | `code_tool.read`, `code_tool.write`, `code_tool.search`, `code_tool.stats`, `code_tool.patch`, `code_tool.explorer` | 无 |
+
+### 能力层
+
+| 插件 | 暴露事件 | 暴露工具 | 命令 |
+|------|---------|---------|------|
+| **llm_gateway** | `llm.response`, `llm.error` | LLM 请求（流式/非流式）、模型状态查询 | `switch`（切换模型） |
+| **memory_service** | 无（纯服务插件） | 记忆存储、记忆检索（RAG）、Insight 管理 | 无 |
+| **role_manager** | `role.created`, `role.destroyed`, `role.skill_invoked` | 角色 CRUD、Soul 解析、session 管理 | `create_role`, `role.list` |
+| **role_learner** | `role.skill_suggested`, `learning.report_generated` | 角色学习、技能检测 | `/learn role` |
+| **mcp_framework** | `tool.result`, `error.tool` | MCP 工具路由、工具注册/发现 | 无 |
+| **upgrade_manager** | `upgrade.report_saved`, `upgrade.reports_pending` | 升级报告管理 | 无 |
+| **wiki_service** | 无 | 知识库检索、知识库更新 | 无 |
+
+### 接入层
+
+| 组件 | 暴露事件 | 暴露工具 | 命令 |
+|------|---------|---------|------|
+| **session-hub** | `user.input`, `user.command`, `user.attachment`, `session.created`, `session.expired`, `channel.registered` | 会话管理 | 会话命令 |
+| **CLI 通道** | `channel.message`, `channel.connected` | 无 | `/exit`, `/help`, `/clear` |
+| **Telegram 通道** | `channel.message`, `channel.connected`, `channel.command` | 无 | `/start`, `/help` |
+| **Web 通道** | `channel.message`, `channel.connected` | 无 | 无 |
+| **桌面端通道** | 无（占位） | 无 | 无 |
+
+### 扩展层
+
+| 插件 | 暴露事件 | 暴露工具 | 命令 |
+|------|---------|---------|------|
+| **test_framework** | `test.completed` | 测试执行 | 无 |
+| **cron_service** | `cron.*`（定时触发） | 定时任务管理 | 无 |
+| **hooks_service** | `file.changed`, `file.created`, `file.deleted` | 钩子管理 | 无 |
+| **doc_sync** | `doc_sync.suggestion_created` | 文档同步 | 无 |
+| **monitor** | 无 | 系统监控、指标查询 | 无 |
+
+### 插件进化声明（manifest.json 扩展）
+
+每个插件 manifest.json 中新增 `notify_on_change` 字段，声明其他维度的变更通知目标：
+
+```json
+{
+  "name": "task_planner",
+  "version": "1.2.0",
+  "exposes": {
+    "events": ["task.planned", "task.plan_updated"],
+    "tools": ["task_planner.decompose", "task_planner.template_match"],
+    "commands": [],
+    "apis": {}
+  },
+  "notify_on_change": [
+    "skill:role_type:worker",     // worker 型角色的技能变更时通知
+    "soul:role_type:worker",      // worker 型角色的 Soul 变更时通知
+    "tool:code_tool"              // code_tool 插件暴露的工具变更时通知
+  ]
+}
+```
+
+**notify_on_change 规则**：
+- `skill:role_type:{type}` — 某类型角色的技能变更时通知
+- `skill:role_id:{id}` — 特定角色的技能变更时通知
+- `soul:role_type:{type}` — 某类型角色的 Soul 变更时通知
+- `soul:role_id:{id}` — 特定角色的 Soul 变更时通知
+- `tool:{plugin_name}` — 某插件的工具变更时通知
+- `plugin:{plugin_name}` — 某插件的进化（新增/更新/废弃工具、事件）时通知
+- `all` — 所有变更都通知
+
+---
+
+## 七、开发规范
 
 1. **所有插件必须实现 PluginInterface**
 2. **所有插件通过事件总线通信，禁止直接方法调用**
 3. **每个插件 PRD 需包含：定位、功能需求、接口定义、配置项、依赖关系、生命周期、安全边界**
 4. **插件加载前必须经过 AST 安全扫描**
-5. **新增插件需同步更新本 README 和 [`prd/README.md`](../README.md)**
+5. **新增插件需按功能分类放入对应子目录，并同步更新本 README 和 [`prd/README.md`](../README.md)**
 6. **插件不主动决策，只响应事件或响应角色调用**
-7. **suri_core 不发布业务事件（task/llm/tool/agent），只发布 system/error 事件**
-8. **所有插件代码自修改必须走统一流程：分析→方案→suri呈现→用户确认→验证→生效**
+7. **所有插件代码自修改必须走统一流程：分析→方案→suri呈现→用户确认→验证→生效**
 
 ---
 
@@ -286,8 +387,9 @@ suri_core（内核插件，自举注册）
 
 | 模块 | 使用者 | 说明 |
 |------|--------|------|
-| **PluginSelfLearning** | 各插件（可选集成） | 插件自学习基类。启发式统计 + LLM 深度分析，生成模块级升级建议（Finding/UpgradeReport）。 |
+| **PluginSelfLearning** | 各插件（可选集成） | 插件自学习基类。启发式统计 + LLM 深度分析，生成模块级升级建议 |
 | **EventBusFixture** | test_framework | 事件总线 mock，供测试使用 |
 | **PluginTestHarness** | test_framework | 插件生命周期 mock，供测试使用 |
 | **AgentContext** | agent_registry | Agent 独立上下文管理，消息隔离 |
 | **TaskStep** | task_planner / agent_registry | 任务步骤数据模型，含依赖关系 |
+| **TemplateUpdater** | template_updater | 模板自动更新服务，监听事件维护 YAML 文件 |
