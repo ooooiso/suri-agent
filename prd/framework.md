@@ -76,6 +76,80 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## 热更新机制
+
+详见 `prd/hot_reload_rules.md`。
+
+核心原则：
+1. **零硬编码** — 所有可变数据必须外部化到文件/数据库/配置中
+2. **事件驱动热更新** — 数据变更后通过 EventBus 发布事件，相关插件自动刷新
+3. **版本协商** — 插件间通过 manifest.json 声明兼容版本，启动时校验
+4. **统一升级通道** — 所有运行时自修改通过 upgrade_manager 统一管理
+
+### 当前硬编码问题清单
+
+| # | 位置 | 硬编码内容 | 应外部化到 | 优先级 |
+|---|------|-----------|-----------|--------|
+| 1 | `plugins/role_manager/plugin.py` | `SOUL_TEMPLATE` 字符串 | `~/.suri/data/templates/soul_template.md` | 🔴 高 |
+| 2 | `plugins/role_manager/plugin.py` | `_get_system_prompt()` 中的工具调用说明 | `~/.suri/data/templates/tool_descriptions.yaml` | 🔴 高 |
+| 3 | `plugins/task_planner/plugin.py` | `_load_builtin_templates()` 中的内置模板 | `~/.suri/data/templates/task_templates.yaml` | 🔴 高 |
+| 4 | `plugins/interrupt_handler/plugin.py` | `_classify_reason()` 中的关键词列表 | `~/.suri/data/configs/interrupt_keywords.yaml` | 🟡 中 |
+| 5 | `plugins/access/plugin.py` | 通道路由逻辑 | `~/.suri/data/configs/channel_routes.yaml` | 🟡 中 |
+
+### 热更新事件流
+
+```
+配置变更 → config_service 发布 config.updated 事件
+    │
+    ▼
+相关插件订阅 config.updated
+    ├── 重新加载配置
+    ├── 更新内存状态
+    └── 继续处理新请求（不影响正在进行的任务）
+```
+
+## 解耦设计原则
+
+详见 `prd/decoupling_principles.md`。
+
+核心原则：
+1. **插件间仅通过 EventBus 通信** — 禁止直接调用其他插件的方法
+2. **数据与逻辑分离** — 配置/模板/关键词等数据外部化，逻辑只处理数据
+3. **每个插件可独立迭代** — 通过 manifest.json 版本声明 + 事件契约保证兼容
+4. **迭代通知机制** — 插件升级后发布 `plugin.upgraded` 事件，框架自动协调
+
+### 角色与插件解耦
+
+```
+角色 (Role) = 数据（Soul 文件、技能、记忆）
+插件 (Plugin) = 逻辑（处理事件、调用 LLM、操作文件）
+
+角色不包含逻辑，插件不包含角色数据
+```
+
+- 插件不绑定特定角色
+- 角色切换只影响 system prompt 和上下文，不影响插件运行
+- 新增角色不需要修改任何插件代码
+
+### 插件版本协商
+
+```json
+{
+  "name": "task_planner",
+  "version": "1.2.0",
+  "api_version": "1.0",
+  "provides_interfaces": ["TaskPlanner"],
+  "requires_interfaces": {
+    "llm_gateway": ">=1.0.0",
+    "role_manager": ">=1.0.0"
+  },
+  "event_contract": {
+    "publishes": ["task.planned", "task.plan_updated"],
+    "subscribes": ["task.plan_requested", "task.replan_requested"]
+  }
+}
+```
+
 ## 基础框架需求
 
 ### 配置管理
@@ -207,6 +281,12 @@ if __name__ == "__main__":
   - `upgrade.*` — 升级报告事件
   - `interrupt.*` — 中断处理事件
   - `doc_sync.*` — 文档同步事件
+
+**已知问题**：EventBus 的 `subscribe` 方法是异步 coroutine，但所有插件的 `register_events()` 中调用 `self.event_bus.subscribe(...)` 时未加 `await`，产生大量 `RuntimeWarning: coroutine was never awaited` 警告（当前 222 个）。建议修复方案：
+- 方案 A：让 `register_events()` 变成 async 方法，插件中 `await self.event_bus.subscribe(...)`
+- 方案 B：让 `subscribe` 支持同步调用（如内部使用 `asyncio.create_task` 或同步队列）
+- 方案 C：EventBus 提供同步的 `subscribe_sync` 方法供 `register_events()` 使用
+- 方案 D：在 PluginManager 加载插件时自动 await register_events 的 coroutine
 
 ### 服务注册发现
 

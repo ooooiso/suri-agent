@@ -32,9 +32,26 @@
 ### 订阅事件
 - `system.config_changed` → 触发重新加载
 - `user.command`（command=reload）→ 重新加载配置
+- `user.command`（command=config.get）→ 查询配置项
+- `user.command`（command=config.set）→ 设置配置项并保存
 
 ### 发布事件
 - `system.config_changed` → 广播配置变更
+
+### 命令处理
+
+#### `/config [key]`
+| 参数 | 说明 |
+|------|------|
+| `key` | 可选。点分路径，如 `llm_gateway.default_provider`。省略时返回全部配置 |
+
+**示例**：
+```bash
+/config                    # 查看全部配置
+/config llm_gateway.default_provider
+```
+
+**说明**：`/config` 命令为只读查询。配置修改通过 `/setkey`（修改 API Key）和 `/reconfig`（配置菜单）完成。
 
 ## 配置项
 
@@ -77,6 +94,32 @@ config_service:
 ### 内存结构
 - `_config: Dict[str, Any]` — 合并后的完整配置树
 - `_defaults: Dict[str, Any]` — 代码内置默认值
+
+### 配置示例（向导生成）
+
+```json
+{
+  "llm_gateway": {
+    "default_provider": "deepseek",
+    "providers": {
+      "deepseek": {
+        "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "base_url": "https://api.deepseek.com",
+        "models": ["deepseek-v4-pro", "deepseek-v4-flash"]
+      }
+    }
+  },
+  "access": {
+    "channels": {
+      "cli": {"enabled": true},
+      "telegram": {
+        "enabled": false,
+        "bot_token": ""
+      }
+    }
+  }
+}
+```
 
 ## 生命周期
 

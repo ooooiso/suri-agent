@@ -113,35 +113,62 @@ class SecurityServicePlugin(PluginInterface):
         return False
 
     async def _on_tool_call(self, event: Event) -> None:
-        """拦截 tool.call 事件进行安全检查。"""
+        """拦截 tool.call 事件进行安全检查。
+        
+        检查通过后放行（重新发布原始事件让目标插件处理），
+        检查不通过则发布 error.tool 事件并阻止调用。
+        """
         tool_name = event.payload.get("tool_name", "")
         params = event.payload.get("params", {})
         
-        if tool_name.startswith("code_tool."):
-            path = params.get("path", "")
-            if tool_name in ("code_tool.read_file", "code_tool.list_dir", "code_tool.grep", "code_tool.stat_project"):
-                if not self.can_read(path):
-                    await self._event_bus.publish(Event(
-                        event_type="error.tool",
-                        source="security_service",
-                        payload={
-                            "tool_name": tool_name,
-                            "error_code": 1101,
-                            "error_message": f"Read access denied: {path}",
-                            "retryable": False,
-                        },
-                        priority=Priority.HIGH,
-                    ))
-            elif tool_name in ("code_tool.write_file", "code_tool.append_file"):
-                if not self.can_write(path):
-                    await self._event_bus.publish(Event(
-                        event_type="error.tool",
-                        source="security_service",
-                        payload={
-                            "tool_name": tool_name,
-                            "error_code": 1102,
-                            "error_message": f"Write access denied: {path}",
-                            "retryable": False,
-                        },
-                        priority=Priority.HIGH,
-                    ))
+        if not tool_name.startswith("code_tool."):
+            return  # 非 code_tool 调用，放行
+        
+        path = params.get("path", "")
+        
+        # 只读操作检查
+        if tool_name in ("code_tool.read_file", "code_tool.list_dir", 
+                         "code_tool.grep", "code_tool.stat_project"):
+            if not self.can_read(path):
+                await self._event_bus.publish(Event(
+                    event_type="error.tool",
+                    source="security_service",
+                    target=event.source,
+                    payload={
+                        "tool_name": tool_name,
+                        "error_code": 1101,
+                        "error_message": f"Read access denied: {path}",
+                        "retryable": False,
+                        "request_id": event.payload.get("request_id"),
+                    },
+                    priority=Priority.HIGH,
+                ))
+                return  # 阻止调用
+        
+        # 写操作检查（迭代 2 启用）
+        elif tool_name in ("code_tool.write_file", "code_tool.append_file"):
+            if not self.can_write(path):
+                await self._event_bus.publish(Event(
+                    event_type="error.tool",
+                    source="security_service",
+                    target=event.source,
+                    payload={
+                        "tool_name": tool_name,
+                        "error_code": 1102,
+                        "error_message": f"Write access denied: {path}",
+                        "retryable": False,
+                        "request_id": event.payload.get("request_id"),
+                    },
+                    priority=Priority.HIGH,
+                ))
+                return  # 阻止调用
+        
+        # 安全检查通过，重新发布原始 tool.call 事件让目标插件（如 code_tool）处理
+        # 使用相同的 event_type 和 payload，确保目标插件能正常接收
+        await self._event_bus.publish(Event(
+            event_type="tool.call",
+            source=event.source,
+            target="code_tool",
+            payload=event.payload.copy(),
+            priority=event.priority,
+        ))

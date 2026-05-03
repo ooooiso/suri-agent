@@ -1,159 +1,391 @@
-# 迭代 5：工具扩展 + 运维完善
+# 迭代 5：热更新 + 解耦重构
 
-> 接入完整工具框架，完善运维能力，系统达到生产可用。
+> 消除所有硬编码，实现数据与逻辑分离，建立插件版本协商和升级通知机制，确保每个插件可独立迭代。
+
+**重要说明**：热更新不是新插件功能，而是对**已有插件的改造**。迭代 5 不新增任何插件，所有任务都是改造已有插件和基础设施。
 
 ---
 
 ## 目标
 
-1. 角色可调用丰富的外部工具（文件读写、网络搜索、数据库查询、命令执行）
-2. 定时任务调度
-3. 完整的事件钩子拦截扩展
-4. 生产级监控、备份、恢复、热重载
-5. 支持第三方插件开发
+1. **零硬编码** — 所有可变数据外部化到文件/配置/数据库中
+2. **事件驱动热更新** — 数据变更后通过 EventBus 发布事件，相关插件自动刷新
+3. **插件版本协商** — manifest.json 声明版本和依赖，启动时校验
+4. **升级通知机制** — 插件升级后发布 `plugin.upgraded` 事件，框架自动协调
+5. **角色与插件解耦** — role_manager 不再代理 suri 角色，改为纯数据服务
 
 ---
 
-## 包含插件（3 个新增）
+## 包含任务（6 个已有插件改造 + 2 个基础设施改造）
 
-| # | 插件 | 说明 |
-|---|------|------|
-| 1 | **mcp_framework** | MCP 工具服务框架、内置工具注册、远程服务调用 |
-| 2 | **cron_service** | 定时任务调度、crontab 风格规则、补偿触发 |
-| 3 | **hooks_service**（完整版） | 事件钩子拦截、文件操作回调、任务钩子、扩展点 |
-
-## 完善（多项）
-
-| # | 能力 | 说明 |
-|---|------|------|
-| 4 | **完整 security_service** | AST 扫描器完善、文件沙箱 enforcement、资源限制、审批令牌 |
-| 5 | **完整 deployment** | systemd、备份/恢复自动化、监控指标、告警规则、日志轮转 |
-| 6 | **数据库迁移** | migration 脚本完整、版本控制、回滚 |
-| 7 | **插件热重载** | 开发模式 watch、运行时动态加载/卸载 |
-| 8 | **plugin_development.md 验证** | 所有共享模块、脚手架、调试工具可用 |
+| # | 任务 | 说明 | 优先级 |
+|---|------|------|--------|
+| 1 | **role_manager 解耦** | 消除 SOUL_TEMPLATE 硬编码，工具说明外部化，不再代理 suri | 🔴 |
+| 2 | **task_planner 热更新** | 任务模板外部化，支持热更新 | 🔴 |
+| 3 | **interrupt_handler 热更新** | 关键词外部化，支持热更新 | 🟡 |
+| 4 | **access 解耦** | 通道路由外部化，通道与逻辑分离 | 🟡 |
+| 5 | **manifest.json 版本协商** | PluginManager 按依赖顺序加载，版本校验 | 🔴 |
+| 6 | **plugin.upgraded 事件** | 升级通知机制，自动协调 | 🔴 |
+| 7 | **EventBus 全局异常捕获** | 统一错误处理，发布 error.plugin_crash | 🟡 |
+| 8 | **agent_registry SQLite 持久化** | 从内存存储迁移到 SQLite | 🟢 |
 
 ---
 
-## 核心功能链路
+## 详细任务分解
 
-### 1. 完整工具调用
+### Week 1：基础设施 + role_manager 解耦
 
-```
-角色需要查询数据库
-    │
-    ▼
-调用 mcp_framework.tool.call(db_query, sql="SELECT ...")
-    │
-    ▼
-mcp_framework 校验权限（security_service）
-    │
-    ▼
-路由到具体工具执行 → 返回结果
-    │
-    ▼
-记录调用审计日志
+#### 任务 1.1：manifest.json 版本协商（PluginManager）
+
+**文件**：`agent_framework/plugin_manager/manager.py`
+
+**变更**：
+1. 解析 manifest.json 的 `dependencies` 字段
+2. 按拓扑排序加载插件，检测循环依赖
+3. 缺少依赖时抛出明确错误
+4. 支持 `optional_dependencies` 字段
+5. 版本校验（`>=`, `~=`, `==` 语义）
+
+**测试**：
+- 正常依赖顺序加载
+- 循环依赖检测
+- 缺少依赖报错
+- 版本不匹配报错
+
+#### 任务 1.2：plugin.upgraded 事件
+
+**文件**：`agent_framework/plugin_manager/manager.py` + `shared/utils/event_types.py`
+
+**变更**：
+1. 新增 `plugin.upgraded` 事件类型
+2. PluginManager 在插件升级后自动发布事件
+3. 新增 `plugin.incompatible` 事件类型
+4. 依赖方订阅 `plugin.upgraded`，自动检查兼容性
+
+**事件定义**：
+```python
+# plugin.upgraded
+{
+  "plugin_id": "task_planner",
+  "old_version": "1.1.0",
+  "new_version": "1.2.0",
+  "changes": ["新增外部模板支持"],
+  "breaking_changes": false,
+  "requires_restart": false
+}
+
+# plugin.incompatible
+{
+  "plugin_id": "task_scheduler",
+  "dependency_id": "task_planner",
+  "required_version": ">=1.1.0",
+  "actual_version": "1.0.0",
+  "action_required": "upgrade_dependency"
+}
 ```
 
-### 2. 定时任务
+#### 任务 1.3：role_manager 解耦
 
-```
-用户配置定时规则（或 role 自动配置）
-    │
-    ▼
-cron_service 加载规则
-    │
-    ▼
-按时触发 cron.{rule_id} 事件
-    │
-    ▼
-目标角色订阅并执行
-    │
-    ├─ 定时备份
-    ├─ 定时健康检查
-    ├─ 定时全局分析（ProgramLearner）
-    └─ 定时清理旧日志
+**文件**：`plugins/role_manager/plugin.py` + `plugins/role_manager/soul_parser.py`
+
+**变更**：
+1. **消除 SOUL_TEMPLATE 硬编码**：
+   - 创建 `~/.suri/data/templates/soul_template.md`
+   - `create_role()` 从外部文件读取模板
+   - 保留代码内 fallback（仅当外部文件不存在时）
+
+2. **工具说明外部化**：
+   - 创建 `~/.suri/data/templates/tool_descriptions.yaml`
+   - `_get_system_prompt()` 从外部文件读取工具说明
+   - 新增工具时只需修改 YAML 文件
+
+3. **不再代理 suri 角色**：
+   - `_on_user_input()` 改为只提供角色数据，不构建 system prompt
+   - 发布 `role.context_ready` 事件，由 suri 角色自己订阅
+   - suri 角色通过 `role.context_ready` 事件获取 Soul 数据
+
+**外部文件格式**：
+
+```yaml
+# ~/.suri/data/templates/tool_descriptions.yaml
+tools:
+  - name: "code_tool.read_file"
+    description: "读取文件内容"
+    params:
+      - name: "path"
+        required: true
+        description: "文件路径"
+      - name: "offset"
+        required: false
+        description: "起始行"
+      - name: "limit"
+        required: false
+        description: "最多行数"
+    example: "tool code_tool.read_file path=main.py offset=0 limit=50"
+  
+  - name: "code_tool.list_dir"
+    description: "列出目录内容"
+    params:
+      - name: "path"
+        required: true
+        description: "目录路径"
+    example: "tool code_tool.list_dir path=plugins/"
 ```
 
-### 3. 完整事件钩子
-
-```
-hooks_service 订阅所有系统事件（通配符）
-    │
-    ▼
-关键操作前后插入钩子
-    │
-    ├─ 文件变更前 → security_service 审批检查
-    ├─ 任务完成后 → doc_sync 文档检查
-    ├─ 插件加载后 → test_framework smoke test
-    ├─ 代码写入前 → lint 检查
-    └─ 错误发生后 → 自动告警通知
-```
+**测试**：
+- 从外部文件加载模板
+- 从外部文件加载工具说明
+- 外部文件不存在时使用 fallback
+- 角色数据提供（不再代理 suri）
 
 ---
 
-## 开发任务分解
+### Week 2：task_planner + interrupt_handler + access 改造
 
-### Week 1：mcp_framework + cron_service
+#### 任务 2.1：task_planner 热更新
 
-| 任务 | 输出文件 | 参考 PRD |
-|------|----------|----------|
-| mcp_framework 插件 | `plugins/mcp_framework/plugin.py` | mcp_framework.md |
-| MCP Server | `plugins/mcp_framework/server.py` | mcp_framework.md §MCP Server |
-| MCP Client | `plugins/mcp_framework/client.py` | mcp_framework.md §MCP Client |
-| 工具注册中心 | `plugins/mcp_framework/registry.py` | mcp_framework.md §Registry |
-| 内置工具 | `plugins/mcp_framework/services/` | mcp_framework.md §内置服务 |
-| 远程服务连接 | `plugins/mcp_framework/remote.py` | mcp_framework.md §远程 Server |
-| cron_service 插件 | `plugins/cron_service/plugin.py` | cron_service.md |
-| 定时调度器 | `plugins/cron_service/scheduler.py` | cron_service.md §定时调度 |
-| 规则存储 | `plugins/cron_service/store.py` | cron_service.md §规则持久化 |
+**文件**：`plugins/task_planner/plugin.py`
 
-### Week 2：hooks_service + 运维完善
+**变更**：
+1. **任务模板外部化**：
+   - 创建 `~/.suri/data/templates/task_templates.yaml`
+   - `_load_builtin_templates()` 改为从外部文件加载
+   - 保留内置模板作为 fallback
 
-| 任务 | 输出文件 | 参考 PRD |
-|------|----------|----------|
-| hooks_service 插件（完整） | `plugins/hooks_service/plugin.py` | hooks_service.md |
-| 钩子注册器 | `plugins/hooks_service/registry.py` | hooks_service.md §钩子注册 |
-| 拦截器 | `plugins/hooks_service/interceptor.py` | hooks_service.md §拦截语义 |
-| 扩展点定义 | `plugins/hooks_service/extension_points.py` | hooks_service.md §扩展点 |
-| 完整 AST 扫描器 | `plugins/security_service/ast_scanner.py` | security_spec.md §AST 扫描器 |
-| 文件沙箱 enforcement | `plugins/security_service/sandbox.py` | security_spec.md §文件沙箱 |
-| 资源限制 | `plugins/security_service/resource_limiter.py` | security_spec.md §资源限制 |
-| 审批令牌 | `plugins/security_service/token_manager.py` | security_spec.md §审批令牌 |
-| systemd unit | `deployment.md §systemd` | deployment.md |
-| 备份脚本 | `scripts/backup.py` | deployment.md §备份策略 |
-| 恢复脚本 | `scripts/restore.py` | deployment.md §恢复流程 |
-| 监控端点 | `plugins/access/health.py` | deployment.md §健康检查 |
-| 热重载 | `agent_framework/plugin_manager/hot_reload.py` | plugin_development.md §热重载 |
-| 数据库迁移 CLI | `scripts/migrate.py` | database_schema.md §迁移策略 |
-| 插件脚手架 | `scripts/create_plugin.py` | plugin_development.md §插件脚手架 |
+2. **支持热更新**：
+   - 订阅 `config.updated` 事件
+   - 订阅 `task_planner.templates_updated` 事件
+   - 重新加载模板时保留内置模板（不可覆盖）
+
+3. **模板注册事件**：
+   - 新增 `task_planner.templates_updated` 事件类型
+   - 其他插件可通过发布此事件通知 task_planner 刷新
+
+**外部文件格式**：
+
+```yaml
+# ~/.suri/data/templates/task_templates.yaml
+templates:
+  - template_id: "custom.code"
+    name: "代码开发"
+    keywords: ["实现", "编写", "开发", "code"]
+    steps:
+      - description: "理解需求"
+        assignee: "suri"
+      - description: "设计"
+        assignee: "suri"
+      - description: "编码"
+        assignee: "suri"
+      - description: "自测"
+        assignee: "suri"
+    default_role: "suri"
+    priority: 10
+    description: "标准代码开发流程"
+```
+
+**测试**：
+- 从外部文件加载模板
+- 热更新后模板生效
+- 内置模板不可覆盖
+- 外部模板优先级高于内置模板
+
+#### 任务 2.2：interrupt_handler 热更新
+
+**文件**：`plugins/interrupt_handler/plugin.py`
+
+**变更**：
+1. **关键词外部化**：
+   - 创建 `~/.suri/data/configs/interrupt_keywords.yaml`
+   - `_classify_reason()` 从外部文件加载关键词
+   - 保留代码内 fallback
+
+2. **支持热更新**：
+   - 订阅 `config.updated` 事件
+   - 重新加载关键词映射
+
+3. **关键词冲突检测**：
+   - 加载时检测关键词重叠并告警
+   - 支持优先级权重（精确匹配 > 子串匹配）
+
+**外部文件格式**：
+
+```yaml
+# ~/.suri/data/configs/interrupt_keywords.yaml
+keywords:
+  missing_tool:
+    - "缺少工具"
+    - "没有接口"
+    - "不支持"
+    - "need tool"
+    - "missing"
+    - "not supported"
+    - "unavailable"
+  knowledge_gap:
+    - "不会"
+    - "不了解"
+    - "不清楚"
+    - "unknown"
+    - "don't know"
+    - "not sure"
+  permission_denied:
+    - "权限不足"
+    - "拒绝访问"
+    - "无权限"
+    - "forbidden"
+    - "denied"
+    - "access denied"
+    - "403"
+  dependency_failed:
+    - "依赖失败"
+    - "上游错误"
+    - "调用失败"
+    - "unavailable"
+    - "dependency"
+    - "connection refused"
+  timeout:
+    - "超时"
+    - "无响应"
+    - "hang"
+    - "timeout"
+    - "no response"
+    - "stuck"
+  resource_exhausted:
+    - "内存不足"
+    - "OOM"
+    - "quota"
+    - "exhausted"
+    - "rate limit"
+    - "429"
+    - "too many requests"
+```
+
+**测试**：
+- 从外部文件加载关键词
+- 热更新后关键词生效
+- 关键词冲突检测告警
+- 精确匹配优先于子串匹配
+
+#### 任务 2.3：access 解耦
+
+**文件**：`plugins/access/plugin.py`
+
+**变更**：
+1. **通道路由外部化**：
+   - 创建 `~/.suri/data/configs/channel_routes.yaml`
+   - 通道选择逻辑从代码中分离
+
+2. **通道与逻辑分离**：
+   - 每个通道（CLI/Telegram）独立文件
+   - 通道注册通过事件机制
+
+**外部文件格式**：
+
+```yaml
+# ~/.suri/data/configs/channel_routes.yaml
+channels:
+  cli:
+    enabled: true
+    module: "plugins.access.cli"
+    description: "命令行交互"
+  telegram:
+    enabled: true
+    module: "plugins.access.telegram"
+    description: "Telegram 机器人"
+    config:
+      bot_token_env: "TELEGRAM_BOT_TOKEN"
+```
+
+**测试**：
+- 从外部文件加载通道配置
+- 启用/禁用通道
+- 新增通道无需修改代码
+
+#### 任务 2.4：EventBus 全局异常捕获
+
+**文件**：`agent_framework/event_bus/bus.py`
+
+**变更**：
+1. `_dispatch()` 方法自动捕获订阅者异常
+2. 异常转为 `error.plugin_crash` 事件发布
+3. 不影响其他订阅者
+
+**测试**：
+- 订阅者抛出异常不影响其他订阅者
+- `error.plugin_crash` 事件正确发布
+- 异常信息包含 handler 名称和错误详情
+
+#### 任务 2.5：agent_registry SQLite 持久化
+
+**文件**：`plugins/agent_registry/plugin.py`
+
+**变更**：
+1. 从内存字典迁移到 SQLite
+2. 启动时从数据库恢复活跃 Agent
+3. 定期持久化 Agent 状态变更
+4. 使用 `agent_framework/migrations/002_agents.sql` 表结构
+
+**测试**：
+- Agent 创建后持久化到数据库
+- 重启后恢复活跃 Agent
+- 状态变更正确持久化
+- 清理过期 Agent
 
 ---
 
 ## 测试矩阵
 
+### 基础设施测试
+
 | 测试项 | 通过标准 |
 |--------|----------|
-| 工具调用 | 角色能调用文件读写、搜索、数据库查询等工具 |
-| 权限控制 | 禁止工具越权访问沙箱外目录 |
-| 远程服务 | 能连接远程 MCP Server 并调用工具 |
-| 定时任务 | crontab 规则按时触发，支持补偿 |
-| 事件钩子 | 钩子能在关键事件前后正确执行，可阻止事件传播 |
-| 备份恢复 | 自动备份能完整恢复系统状态 |
-| 健康检查 | `/health` 端点返回正确状态 |
-| 热重载 | 插件文件变更后自动重载，不影响运行中任务 |
-| 迁移回滚 | 数据库迁移和回滚脚本正确执行 |
-| 脚手架 | `create_plugin.py` 能生成完整插件模板 |
+| 版本协商 | 依赖顺序正确加载，循环依赖检测 |
+| 版本校验 | 版本不匹配时拒绝加载 |
+| 升级通知 | 插件升级后自动发布 plugin.upgraded |
+| 不兼容检测 | 依赖方检测到不兼容并阻止升级 |
+| 全局异常捕获 | 订阅者异常不影响其他订阅者 |
+
+### 插件改造测试
+
+| 测试项 | 通过标准 |
+|--------|----------|
+| role_manager 解耦 | Soul 模板从外部文件加载，工具说明从外部文件加载 |
+| role_manager 不再代理 suri | 发布 role.context_ready 事件，suri 自己订阅 |
+| task_planner 热更新 | 模板从外部文件加载，热更新后立即生效 |
+| interrupt_handler 热更新 | 关键词从外部文件加载，热更新后立即生效 |
+| access 解耦 | 通道路由从外部文件加载，新增通道无需改代码 |
+| agent_registry 持久化 | Agent 数据持久化到 SQLite，重启后恢复 |
+
+### 回归测试
+
+| 测试项 | 通过标准 |
+|--------|----------|
+| 全量测试 | 所有现有测试通过（59+ 新增） |
+| 热更新不影响运行中任务 | 热更新时正在处理的任务不受影响 |
+| 外部文件不存在时 fallback | 外部文件缺失时使用代码内默认值 |
 
 ---
 
-## 迭代 5 结束时系统状态
+## 文件变更清单
 
-- 20 个插件全部可用，代码能力完整（读/写/执行/分析/升级）
-- 所有 PRD 文档已实现并回归验证
-- suri 具备完整的自我进化能力：
-  - 读取自身代码和 PRD
-  - 分析瓶颈、生成优化方案
-  - 执行代码变更、测试验证、失败回滚
-  - 从经验学习、技能形成、持续进化
-- 具备生产部署能力（systemd、监控、备份）
-- 插件开发规范完整，支持第三方开发
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `agent_framework/plugin_manager/manager.py` | 修改 | 版本协商、拓扑排序、升级通知 |
+| `agent_framework/event_bus/bus.py` | 修改 | 全局异常捕获 |
+| `shared/utils/event_types.py` | 修改 | 新增事件类型 |
+| `plugins/role_manager/plugin.py` | 修改 | 解耦、外部化、不再代理 suri |
+| `plugins/role_manager/soul_parser.py` | 修改 | 支持外部模板 |
+| `plugins/task_planner/plugin.py` | 修改 | 模板外部化、热更新 |
+| `plugins/interrupt_handler/plugin.py` | 修改 | 关键词外部化、热更新 |
+| `plugins/access/plugin.py` | 修改 | 通道路由外部化 |
+| `plugins/agent_registry/plugin.py` | 修改 | SQLite 持久化 |
+| `~/.suri/data/templates/soul_template.md` | 新增 | Soul 模板 |
+| `~/.suri/data/templates/tool_descriptions.yaml` | 新增 | 工具调用说明 |
+| `~/.suri/data/templates/task_templates.yaml` | 新增 | 任务模板 |
+| `~/.suri/data/configs/interrupt_keywords.yaml` | 新增 | 中断关键词 |
+| `~/.suri/data/configs/channel_routes.yaml` | 新增 | 通道路由 |
+| `tests/plugin/test_plugin_manager.py` | 新增 | 版本协商测试 |
+| `tests/plugin/test_event_bus_error.py` | 新增 | 全局异常捕获测试 |
+| `tests/plugin/test_role_manager_hot_reload.py` | 新增 | 热更新测试 |
+| `tests/plugin/test_task_planner_hot_reload.py` | 新增 | 热更新测试 |
+| `tests/plugin/test_interrupt_handler_hot_reload.py` | 新增 | 热更新测试 |
+| `tests/plugin/test_agent_registry_persistence.py` | 新增 | 持久化测试 |

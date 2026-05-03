@@ -1,0 +1,20 @@
+{
+  "manifest_version": "1.0",
+  "name": "interrupt_handler",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "capability",
+  "description": "任务执行受阻时的系统级处理，分类受阻原因，生成用户决策建议",
+  "permissions": ["agent.*", "task.*", "user.input"],
+  "event_subscriptions": ["agent.blocked", "task.failed", "task.timeout", "user.decision"],
+  "dependencies": ["suri_core", "agent_registry", "task_scheduler"],
+  "config_schema": {
+    "interrupt_handler": {
+      "enable_auto_retry": { "type": "boolean", "default": true },
+      "auto_retry_types": { "type": "array", "default": ["dependency_failed", "timeout"] },
+      "max_auto_retries": { "type": "integer", "default": 2, "min": 0, "max": 5 },
+      "decision_timeout": { "type": "integer", "default": 600, "min": 60, "max": 3600 }
+    }
+  }
+}

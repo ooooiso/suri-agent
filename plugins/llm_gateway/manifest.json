@@ -8,7 +8,7 @@
   "description": "5 家国内大模型路由与多版本管理",
   "author": "",
   "permissions": ["system.*"],
-  "event_subscriptions": ["llm.call", "user.command"],
+  "event_subscriptions": ["llm.request", "user.command", "system.config_changed"],
   "fs_permissions": {},
   "runtime_mutable": true,
   "dependencies": ["suri_core", "config_service"],
@@ -22,7 +22,7 @@
           "tongyi": { "models": ["qwen-max", "qwen-plus"], "base_url": "https://dashscope.aliyuncs.com" },
           "chatglm": { "models": ["glm-4", "glm-3-turbo"], "base_url": "https://open.bigmodel.cn" },
           "kimi": { "models": ["moonshot-v1-8k", "moonshot-v1-32k"], "base_url": "https://api.moonshot.cn" },
-          "deepseek": { "models": ["deepseek-chat", "deepseek-coder"], "base_url": "https://api.deepseek.com" }
+          "deepseek": { "models": ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat"], "base_url": "https://api.deepseek.com" }
         }
       }
     }

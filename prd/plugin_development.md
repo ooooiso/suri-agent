@@ -140,6 +140,22 @@ class MyPlugin(PluginInterface):
             pass
 ```
 
+### 导入规则
+
+**插件内部必须使用绝对导入**，禁止使用相对导入（`from .xxx`）。
+
+原因：插件由 PluginManager 通过 `importlib.util.spec_from_file_location` 动态加载，模块没有包上下文，相对导入会抛出 `ImportError: attempted relative import with no known parent package`。
+
+```python
+# ✅ 正确：绝对导入
+from plugins.llm_gateway.plugin import LLMGatewayPlugin
+from shared.utils.event_types import Event, Priority
+
+# ❌ 错误：相对导入
+from .plugin import LLMGatewayPlugin
+from ..shared.utils.event_types import Event
+```
+
 ## 4. 事件订阅与发布
 
 ### 订阅事件
@@ -171,6 +187,41 @@ event = Event(
 
 await self.event_bus.publish(event)
 ```
+
+**⚠️ 事件循环预防（铁律）**：
+
+订阅某个事件的插件，**禁止在处理该事件时重新发布同名事件**，否则会被自己再次订阅处理，形成无限循环。
+
+```python
+# ❌ 错误：自己订阅 user.command，处理时又发布 user.command
+class AccessPlugin(PluginInterface):
+    def register_events(self):
+        self._event_bus.subscribe("user.command", self._on_command)
+    
+    async def _on_command(self, event):
+        if event.payload["command"] == "reload":
+            # 错误！这会触发自己再次被调用
+            await self._event_bus.publish(Event(
+                event_type="user.command",          # ❌ 同名事件
+                source="access",
+                payload={"command": "reload", ...}
+            ))
+
+# ✅ 正确：让原始事件自然到达目标插件，不要中转重复发布
+class AccessPlugin(PluginInterface):
+    def register_events(self):
+        self._event_bus.subscribe("user.command", self._on_command)
+    
+    async def _on_command(self, event):
+        if event.payload["command"] == "reload":
+            # config_service 已直接订阅 user.command，原始事件会自然到达
+            # access 只需发送确认消息，不需要重新发布事件
+            print("配置已重载")
+```
+
+**规则总结**：
+- 如果目的是让其他插件收到事件 → **不要重新发布**，EventBus 广播机制已经确保所有订阅者都能收到原始事件
+- 如果目的是改变命令类型（如 `/model` → `llm.list`）→ **可以发布不同名事件**，但需确保不会循环回自己
 
 ### 事件 Payload 规范
 
@@ -551,3 +602,149 @@ python scripts/create_plugin.py --name my_plugin --type capability
 - [ ] PRD 文档已编写并同步更新 plugins/README.md
 - [ ] 通过 AST 安全扫描（无危险操作）
 - [ ] 依赖关系已声明，无循环依赖
+
+---
+
+## 12. 热更新规范
+
+### 12.1 数据外部化要求
+
+所有插件必须遵循"零硬编码"原则：
+
+| 数据类型 | 存储位置 | 示例 | 热更新 |
+|----------|---------|------|--------|
+| 配置 | `~/.suri/config.json` | 模型选择、超时时间 | ✅ |
+| 模板 | `~/.suri/data/templates/` | Soul 模板、任务模板 | ✅ |
+| 关键词 | `~/.suri/data/configs/` | 中断关键词 | ✅ |
+| 角色数据 | `~/.suri/runtime/roles/` | Soul 文件、技能 | ✅ |
+| 插件数据 | `~/.suri/data/plugins/` | 各插件专属数据 | ✅ |
+| 代码逻辑 | `plugins/{name}/plugin.py` | 事件处理、业务逻辑 | ❌（需升级流程）|
+
+### 12.2 热更新事件订阅
+
+插件如需支持热更新，必须订阅 `config.updated` 事件：
+
+```python
+class MyPlugin(PluginInterface):
+    def register_events(self):
+        self.event_bus.subscribe("config.updated", self._on_config_updated)
+    
+    async def _on_config_updated(self, event: Event):
+        """配置热更新处理"""
+        plugin_id = event.payload.get("plugin_id")
+        config_key = event.payload.get("config_key")
+        
+        if plugin_id == self.name:
+            # 重新加载配置
+            self.config = event.payload.get("new_config", {})
+            # 重新加载外部数据
+            self._load_external_data()
+```
+
+### 12.3 版本协商
+
+manifest.json 必须声明版本和依赖：
+
+```json
+{
+  "name": "my_plugin",
+  "version": "1.0.0",
+  "api_version": "1.0",
+  "provides_interfaces": ["MyInterface"],
+  "requires_interfaces": {
+    "llm_gateway": ">=1.0.0",
+    "role_manager": ">=1.0.0"
+  },
+  "event_contract": {
+    "publishes": ["my_plugin.event"],
+    "subscribes": ["other_plugin.event"]
+  }
+}
+```
+
+### 12.4 升级通知
+
+插件升级后必须发布 `plugin.upgraded` 事件：
+
+```python
+async def _notify_upgrade(self, old_version: str, new_version: str):
+    await self.event_bus.publish(Event(
+        event_type="plugin.upgraded",
+        source=self.name,
+        payload={
+            "plugin_id": self.name,
+            "old_version": old_version,
+            "new_version": new_version,
+            "changes": ["变更说明"],
+            "breaking_changes": False,
+            "requires_restart": False,
+        }
+    ))
+```
+
+## 13. 解耦规范
+
+### 13.1 插件间通信
+
+- 禁止直接 import 其他插件的类并调用其方法
+- 禁止共享可变状态（全局变量、共享内存字典）
+- 所有跨插件交互必须通过事件发布/订阅
+
+### 13.2 角色与插件解耦
+
+- 插件不绑定特定角色
+- 角色切换只影响 system prompt 和上下文，不影响插件运行
+- 新增角色不需要修改任何插件代码
+
+### 13.3 数据与逻辑分离
+
+- 所有可变数据必须外部化到文件/数据库/配置中
+- 插件代码只包含处理逻辑，不包含业务数据
+- 数据变更通过事件通知，插件自动刷新
+
+## 14. 已知问题 & 架构优化项（迭代 2 发现）
+
+### 12.1 manifest.json 缺少 dependencies 声明规范
+
+**问题描述**：当前 manifest.json 的 `dependencies` 字段已存在但未强制校验，plugin_manager 未按依赖顺序加载插件。例如 task_planner 依赖 llm_gateway 和 role_manager，但加载顺序无保障。
+
+**建议优化**：
+- PluginManager 在加载插件时解析 manifest.json 的 `dependencies` 字段
+- 按拓扑排序加载插件，检测循环依赖
+- 缺少依赖时抛出明确错误（如 "plugin X requires plugin Y, but Y is not loaded"）
+- 支持 `optional_dependencies` 字段（非必需依赖）
+
+### 12.2 配置管理分散在各插件中
+
+**问题描述**：每个插件在 `init()` 中从 `config` 字典读取自己的配置段，没有统一的热更新机制。
+
+**建议优化**：
+- 统一通过 config_service 插件管理配置
+- 支持运行时热更新（config_service 发布 `config.updated` 事件）
+- 插件监听 `config.updated` 事件自动刷新配置
+
+### 12.3 缺少全局错误处理中间件
+
+**问题描述**：每个插件各自 try/except，没有统一的未捕获异常处理机制。
+
+**建议优化**：
+- EventBus 支持全局 error handler
+- 插件抛出未捕获异常时，EventBus 自动捕获并发布 `error.plugin_crash` 事件
+- interrupt_handler 订阅 `error.plugin_crash` 事件进行统一处理
+
+### 12.4 agent_registry 使用内存存储而非数据库
+
+**问题描述**：`agent_framework/migrations/002_agents.sql` 已创建但 agent_registry 插件使用内存字典存储，重启后数据丢失。
+
+**建议优化**：
+- 后续迭代接入 SQLite 持久化
+- 启动时从数据库恢复活跃 Agent
+- 定期持久化 Agent 状态变更
+
+### 12.5 task_scheduler 插件缺少测试
+
+**问题描述**：task_scheduler 的 plugin.py 已创建但无对应测试文件。
+
+**建议优化**：
+- 迭代 3 补充 task_scheduler 测试（优先级排序、并发控制、超时重试、LLM 等待等）
+- 参考测试矩阵：约 12 个测试用例

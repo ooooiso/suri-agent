@@ -78,10 +78,21 @@ class EventBus:
             await self._queue.put((event.priority.value, self._counter, event))
 
     def subscribe(self, pattern: str, handler: Callable[[Event], Any]) -> None:
-        """订阅事件。支持通配符，如 'system.*'、'task.*'。"""
+        """订阅事件。支持通配符，如 'system.*'、'task.*'。
+        
+        注意：这是同步方法，handler 可以是同步或异步函数。
+        如果 handler 是 coroutine，EventBus 会在 _safe_call 中自动 await。
+        """
         if pattern not in self._subscribers:
             self._subscribers[pattern] = []
         self._subscribers[pattern].append(handler)
+
+    def subscribe_sync(self, pattern: str, handler: Callable[[Event], Any]) -> None:
+        """同步订阅事件（别名，与 subscribe 行为一致）。
+        
+        供 register_events() 等同步上下文使用，避免误以为 subscribe 是异步方法。
+        """
+        self.subscribe(pattern, handler)
 
     def unsubscribe(self, pattern: str, handler: Callable[[Event], Any]) -> None:
         """取消订阅。"""
@@ -147,17 +158,19 @@ class EventBus:
             await self.publish(error_event)
 
     def _persist_event(self, event: Event) -> None:
-        """持久化事件到 SQLite。"""
+        """持久化事件到 SQLite。
+        
+        使用自增 ID 作为主键，避免 request_id 重复导致事件丢失。
+        """
         if not self._db_path:
             return
         try:
             conn = sqlite3.connect(self._db_path)
             conn.execute(
-                """INSERT OR IGNORE INTO events 
-                   (event_id, event_type, source, target, payload, priority, timestamp, consumed)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO events 
+                   (event_type, source, target, payload, priority, timestamp, consumed)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    event.request_id or f"evt_{event.timestamp}",
                     event.event_type,
                     event.source,
                     event.target,

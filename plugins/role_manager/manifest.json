@@ -8,7 +8,7 @@
   "description": "角色管理：核心角色 suri 的创建与 Soul 管理",
   "author": "",
   "permissions": ["system.*", "role.*"],
-  "event_subscriptions": ["role.create", "user.command"],
+  "event_subscriptions": ["role.create", "user.command", "user.input"],
   "fs_permissions": {
     "read": ["roles/", "~/.suri/runtime/roles/"],
     "write": ["~/.suri/runtime/roles/"]

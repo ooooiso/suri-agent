@@ -1,0 +1,20 @@
+{
+  "manifest_version": "1.0",
+  "name": "task_scheduler",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "capability",
+  "description": "任务调度中心，负责任务分发、执行跟踪、状态管理",
+  "permissions": ["task.*", "agent.*", "llm.request"],
+  "event_subscriptions": ["task.planned", "task.step_ready", "task.plan_updated", "llm.response", "llm.error", "interrupt.retry_requested", "interrupt.cancelled"],
+  "dependencies": ["suri_core", "llm_gateway", "agent_registry"],
+  "config_schema": {
+    "task_scheduler": {
+      "enabled": { "type": "boolean", "default": true },
+      "max_concurrent_tasks": { "type": "integer", "default": 5, "min": 1, "max": 50 },
+      "default_timeout": { "type": "integer", "default": 300, "min": 30, "max": 3600 },
+      "max_retries": { "type": "integer", "default": 2, "min": 0, "max": 5 }
+    }
+  }
+}

@@ -2,148 +2,204 @@
 
 ## 定位
 
-测试框架插件，为系统提供自动化测试发现、执行、报告能力。覆盖单元测试、集成测试、插件测试，支持运行时通过命令触发测试，保障代码质量和回归安全。
+提供标准化的测试基础设施，所有插件测试使用统一基类和夹具。
+
+**关键约束**：只提供测试工具，不参与业务逻辑。测试代码不部署到生产环境。
+
+---
 
 ## 功能需求
 
-### 1. 测试发现
+### 1. EventBusFixture
 
-- 自动扫描 `tests/` 目录下的测试文件
-- 支持标准 unittest 格式（`test_*.py`）和脚本格式（`*_test.py`）
-- 按模块分类：unit（单元）、integration（集成）、plugin（插件）、fullforce（压力）
-- 发现结果缓存，增量更新
+内存事件总线 mock，用于插件测试。
 
-### 2. 测试执行
-- 通过 `/test` 命令或 `user.command` 事件触发
-- 支持全量执行、按模块执行、按文件执行
-- 异步执行，不阻塞主事件循环
-- 并发控制（默认 4  worker）
+```python
+class EventBusFixture:
+    """测试用 EventBus mock，记录所有发布的事件"""
+    
+    def __init__(self):
+        self._subscribers: Dict[str, List[Callable]] = {}
+        self._published: List[Event] = []
+    
+    async def publish(self, event: Event) -> None:
+        """发布事件，记录到 _published 列表"""
+        self._published.append(event)
+        # 同步调用匹配的订阅者
+        for pattern, handlers in self._subscribers.items():
+            if self._match(pattern, event.event_type):
+                for handler in handlers:
+                    await handler(event)
+    
+    async def subscribe(self, pattern: str, handler: Callable) -> None:
+        """注册订阅"""
+        if pattern not in self._subscribers:
+            self._subscribers[pattern] = []
+        self._subscribers[pattern].append(handler)
+    
+    def get_published_events(self, event_type: str = None) -> List[Event]:
+        """获取已发布的事件列表，可按类型过滤"""
+        if event_type:
+            return [e for e in self._published if e.event_type == event_type]
+        return self._published
+    
+    def clear(self) -> None:
+        """清空所有记录"""
+        self._published.clear()
+        self._subscribers.clear()
+    
+    def _match(self, pattern: str, event_type: str) -> bool:
+        """通配符匹配"""
+        if pattern == event_type:
+            return True
+        if pattern.endswith("*"):
+            return event_type.startswith(pattern[:-1])
+        return False
+```
 
-### 3. 测试基础设施
-- `TestBase` — 测试基类，提供 mock event_bus、mock plugin、临时数据库
-- `PluginTestHarness` — 插件测试专用夹具，模拟插件生命周期
-- `EventBusFixture` — 事件总线 mock，支持断言事件发布/订阅
-- `RoleFixture` — 角色环境 mock，创建临时角色目录和数据库
+### 2. TestBase
 
-### 4. 测试报告
-- 实时输出到终端（unittest 风格）
-- 生成结构化报告（JSON / Markdown）
-- 存储于 `resources/test_reports/`
-- 历史结果对比（通过/失败趋势）
+所有测试的基类，提供隔离的运行环境。
 
-### 5. 回归触发
-- 代码变更后自动检测受影响的测试
-- 支持 `/test regression` 快速运行相关用例
-- 失败时通过 event_bus 广播 `error.test`
+```python
+class TestBase(unittest.IsolatedAsyncioTestCase):
+    """测试基类，提供 EventBusFixture 和临时目录"""
+    
+    async def asyncSetUp(self):
+        self.bus = EventBusFixture()
+        self.tmp_dir = tempfile.mkdtemp()
+    
+    async def asyncTearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+    
+    def create_event(self, event_type: str, payload: dict, 
+                     source: str = "test") -> Event:
+        return Event(event_type=event_type, source=source, payload=payload)
+```
 
-### 6. 插件专属测试
-- 每个插件可声明自己的测试目录（`manifest.test_dir`）
-- 插件加载时自动运行 smoke test
-- 插件卸载前运行 cleanup test
+### 3. PluginTestHarness
+
+插件加载和生命周期测试工具。
+
+```python
+class PluginTestHarness:
+    """插件测试工具，模拟插件加载和生命周期"""
+    
+    def __init__(self, bus: EventBusFixture):
+        self.bus = bus
+        self.plugin = None
+    
+    async def load_plugin(self, plugin_class: type, config: dict = None) -> PluginInterface:
+        """加载插件实例"""
+        self.plugin = plugin_class()
+        await self.plugin.init(self.bus, config or {})
+        self.plugin.register_events()
+        await self.plugin.start()
+        return self.plugin
+    
+    async def run_lifecycle(self) -> None:
+        """运行完整生命周期测试"""
+        await self.plugin.pause()
+        await self.plugin.resume()
+        await self.plugin.stop()
+        await self.plugin.cleanup()
+    
+    def assert_event_published(self, event_type: str) -> None:
+        """断言某类型事件已被发布"""
+        events = self.bus.get_published_events(event_type)
+        self.assertTrue(len(events) > 0, f"Event {event_type} not published")
+    
+    def assert_event_not_published(self, event_type: str) -> None:
+        """断言某类型事件未被发布"""
+        events = self.bus.get_published_events(event_type)
+        self.assertEqual(len(events), 0, f"Event {event_type} was published")
+```
+
+### 4. RoleFixture
+
+角色环境 mock，创建临时角色目录。
+
+```python
+class RoleFixture:
+    """角色测试夹具，创建临时角色目录和 Soul 文件"""
+    
+    def __init__(self, role_id: str = "test_role"):
+        self.role_id = role_id
+        self.tmp_dir = tempfile.mkdtemp()
+        self.role_dir = f"{self.tmp_dir}/roles/{role_id}"
+        os.makedirs(f"{self.role_dir}/memories/insights", exist_ok=True)
+        os.makedirs(f"{self.role_dir}/skills", exist_ok=True)
+        self.soul_path = f"{self.role_dir}/soul.md"
+    
+    def write_soul(self, content: str) -> None:
+        """写入 Soul 文件"""
+        with open(self.soul_path, "w") as f:
+            f.write(content)
+    
+    def get_insights_dir(self) -> str:
+        return f"{self.role_dir}/memories/insights"
+    
+    def cleanup(self) -> None:
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+```
+
+---
 
 ## 接口定义
 
 ### 订阅事件
-- `user.command`（/test）→ 执行测试
-- `system.config_changed` → 清除测试缓存
-- `system.plugin_loaded` → 触发插件 smoke test
 
-### 发布事件
-- `test.completed` — 测试执行完成（含 summary）
-- `error.test` — 测试失败告警
-
-## 事件 Payload Schema
-
-### 订阅事件
-
-#### `user.command`（/test）
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `user_id` | string | 是 | 用户 ID |
-| `command` | string | 是 | 命令名 |
-| `args` | object | 是 | 参数（test_type, target_plugin 等） |
-| `channel` | string | 是 | 通道 |
-
-#### `system.config_changed`
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `config_key` | string | 是 | 变更的配置项 |
-| `old_value` | any | 是 | 旧值 |
-| `new_value` | any | 是 | 新值 |
-
-#### `system.plugin_loaded`
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `plugin_id` | string | 是 | 加载的插件 ID |
-| `manifest` | object | 是 | 插件 manifest |
+无（test_framework 不订阅业务事件）
 
 ### 发布事件
 
-#### `test.completed`
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `test_suite` | string | 是 | 测试套件名称 |
-| `total` | integer | 是 | 总用例数 |
-| `passed` | integer | 是 | 通过数 |
-| `failed` | integer | 是 | 失败数 |
-| `skipped` | integer | 是 | 跳过数 |
-| `duration_ms` | integer | 否 | 总耗时 |
-| `failures` | array | 否 | 失败的用例详情 |
+无（test_framework 不发布业务事件）
 
-#### `error.test`
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `plugin_id` | string | 是 | 被测插件 |
-| `error_code` | integer | 是 | 错误码 |
-| `error_message` | string | 是 | 错误描述 |
+---
 
 ## 配置项
 
 ```yaml
 test_framework:
-  test_dir: "tests/"
-  report_dir: "resources/test_reports/"
-  default_workers: 4
-  auto_smoke_test: true  # 插件加载后自动 smoke test
-  categories:
-    unit: "tests/unit/"
-    integration: "tests/integration/"
-    plugin: "tests/plugin/"
-    fullforce: "tests/fullforce/"
-  fail_fast: false
+  enabled: true
+  tmp_dir_prefix: "suri_test_"
 ```
+
+---
 
 ## 依赖关系
 
-- 上游：suri_core、config_service
-- 下游：所有被测试的插件
+- 上游：无（独立工具）
+- 下游：所有插件的测试代码
 
-## 目录结构
-iteration plan
-```
-tests/
-├── __init__.py
-├── framework/
-│   ├── base.py            # TestBase 基类
-│   ├── fixtures.py        # 共享夹具
-│   ├── utils.py           # 测试工具函数
-│   └── plugin_harness.py  # 插件测试 harness
-├── unit/                  # 单元测试
-├── integration/           # 集成测试
-├── plugin/                # 插件测试
-└── fullforce/             # 压力/并发测试
-```
+---
 
 ## 生命周期
 
-1. `init()` → 扫描测试目录、加载测试基类
-2. `register_events()` → 订阅 /test 命令
-3. `start()` → 标记就绪
-4. `stop()` → 中断正在运行的测试
-5. `cleanup()` → 清理临时测试数据
+1. `init()` → 无操作（工具类，无状态）
+2. `start()` → 无操作
+3. `stop()` → 无操作
+4. `cleanup()` → 无操作
 
-## 安全边界
+---
 
-- 测试在隔离环境运行（临时目录、临时数据库）
-- 禁止测试直接操作生产数据目录
-- 压力测试默认限制并发数，防止资源耗尽
+## 已知问题 & 优化项（迭代 2 发现）
+
+### 1. `run_lifecycle` 是异步方法但被同步调用
+
+**问题描述**：`PluginTestHarness.run_lifecycle()` 是 async 方法，但测试中调用时未加 `await`（如 `self.harness.run_lifecycle()`），导致生命周期测试实际上没有真正执行完整的生命周期流程。
+
+**影响**：`test_lifecycle` 测试虽然通过，但未验证 pause → resume → stop → cleanup 的实际执行。
+
+**建议修复**：
+- 测试中改为 `await self.harness.run_lifecycle()`
+- 或让 `run_lifecycle` 支持同步调用（内部使用 `asyncio.run` 或 `create_task`）
+
+### 2. EventBusFixture 与真实 EventBus 行为不一致
+
+**问题描述**：EventBusFixture 的 `subscribe` 是同步方法，但真实 EventBus 的 `subscribe` 是异步 coroutine。接口签名不同，导致测试环境与生产环境行为不一致。
+
+**建议修复**：
+- 统一接口签名，让 EventBusFixture 的 `subscribe` 也返回 coroutine
+- 或让真实 EventBus 提供同步的 `subscribe_sync` 方法
+- 或让 EventBusFixture 完全模拟真实 EventBus 的行为（包括异步分发、优先级排序等）

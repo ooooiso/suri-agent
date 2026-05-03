@@ -5,8 +5,8 @@
 **代码工具插件**。为角色提供安全的代码文件读写和代码操作能力。所有文件操作通过 security_service 沙箱执行，受路径白名单和审批令牌约束。
 
 **关键约束**：
-- 迭代 1 只实现只读能力（read_file / list_dir / grep / stat_project）
-- 迭代 2 扩展为读写能力（write_file / execute_test / run_linter / execute_command）
+- 迭代 1 实现只读 + 写入能力（read_file / list_dir / grep / stat_project / write_file / append_file / create_file）
+- 迭代 2 扩展为完整读写能力（execute_test / run_linter / execute_command）
 - 不解析业务代码语义，只提供文件操作原语
 - 代码分析和理解由调用方（角色 + llm_gateway）完成
 
@@ -41,33 +41,37 @@
 - 插件数量（读取 plugins/ 目录）
 - 角色数量（读取 roles/ 目录）
 
-### 5. 文件写入（write_file）【迭代 2 解锁】
+### 5. 文件写入（write_file）【迭代 1 已实现】
 
 - 写入或覆盖指定路径的文件
-- 默认需要审批令牌（security_service）
 - 写入前检查路径是否在写白名单
-- 写入后发布 hooks.file_changed 事件
+- 禁止写入 agent_framework/、shared/interfaces/、~/.suri/
+- plugins/、tests/、roles/ 目录写入需标记 needs_approval
 
-### 6. 文件追加（append_file）【迭代 2 解锁】
+### 6. 文件追加（append_file）【迭代 1 已实现】
 
 - 追加内容到文件末尾
-- 同样受写白名单和审批约束
+- 同样受写白名单约束
 
-### 7. 测试执行（execute_test）【迭代 2 解锁】
+### 7. 创建新文件（create_file）【迭代 1 已实现】
+
+- 创建新文件，如果已存在则返回错误码 4005
+
+### 8. 测试执行（execute_test）【迭代 2 解锁】
 
 - 在隔离环境运行测试
 - 复制目标代码到临时目录
 - 使用 Python 内置 unittest 运行
 - 返回测试结果（通过/失败/错误列表）
 
-### 8. 代码检查（run_linter）【迭代 2 解锁】
+### 9. 代码检查（run_linter）【迭代 2 解锁】
 
 - 运行基础语法和风格检查
 - 使用 Python 内置 ast 模块检查语法
 - 检查导入是否有效（不实际导入，只检查模块名）
 - 检查缩进一致性
 
-### 9. 命令执行（execute_command）【迭代 2 解锁】
+### 10. 命令执行（execute_command）【迭代 2 解锁】
 
 - 执行白名单内的系统命令
 - 默认在临时目录执行
@@ -101,12 +105,14 @@ class CodeTool:
     
     async def stat_project(self) -> ProjectStats
     
-    # === 迭代 2：读写 ===
-    async def write_file(self, path: str, content: str,
-                         require_approval: bool = True) -> WriteResult
+    # === 迭代 1 增强：写入 ===
+    async def write_file(self, path: str, content: str) -> WriteResult
     
     async def append_file(self, path: str, content: str) -> WriteResult
     
+    async def create_file(self, path: str, content: str) -> WriteResult
+    
+    # === 迭代 2：执行 ===
     async def execute_test(self, test_path: str) -> TestResult
     
     async def run_linter(self, path: str) -> LinterResult
@@ -172,7 +178,18 @@ ALLOWED_READ_PATHS = [
 ]
 ```
 
-### 写白名单【迭代 2 解锁】
+### 路径安全检查逻辑
+
+1. **解析绝对路径**：将用户输入路径解析为绝对路径（基于项目根目录）
+2. **标准化路径**：使用 `os.path.normpath` 消除 `..` 和 `.`  segments
+3. **前缀匹配**：检查标准化后的路径是否以白名单目录开头
+4. **禁止访问**：以下路径永远拒绝：
+   - `~/.suri/` 运行时数据（含 config.json、密钥）
+   - `/etc/`、`/usr/`、`/bin/` 等系统目录
+   - 任何包含 `..` 试图逃逸项目根目录的路径
+5. **错误返回**：路径检查失败时发布 `error.tool` 事件，错误码 `3100`（`code_tool.path_denied`），不暴露内部路径结构
+
+### 写白名单【迭代 1 已实现】
 
 ```python
 ALLOWED_WRITE_PATHS = [
@@ -252,7 +269,7 @@ code_tool/
 ├── explorer.py              # list_dir 实现（迭代 1）
 ├── search.py                # grep 实现（迭代 1）
 ├── stats.py                 # stat_project 实现（迭代 1）
-├── writer.py                # write_file / append_file（迭代 2 解锁）
+├── writer.py                # write_file / append_file / create_file（迭代 1 已实现）
 ├── test_runner.py           # execute_test（迭代 2 解锁）
 └── executor.py              # execute_command（迭代 2 解锁）
 ```
@@ -282,6 +299,11 @@ code_tool/
 | `3108` | `code_tool.grep_error` | 搜索执行失败 |
 | `3109` | `code_tool.stat_path_not_found` | 统计路径不存在 |
 | `3110` | `code_tool.stat_error` | 项目统计失败 |
+| `4001` | `code_tool.path_out_of_bounds` | 路径越界（不在项目根目录内） |
+| `4002` | `code_tool.forbidden_path` | 禁止写入系统目录 |
+| `4003` | `code_tool.permission_denied` | 无权限写入 |
+| `4004` | `code_tool.write_error` | 写入失败（OS 错误） |
+| `4005` | `code_tool.file_exists` | 文件已存在（create_file） |
 
 ## 安全边界
 

@@ -20,3 +20,8 @@ venv/
 # Temp
 .temp/
 tmp/
+
+# Runtime
+~/
+~/.suri/
+.pytest_cache/

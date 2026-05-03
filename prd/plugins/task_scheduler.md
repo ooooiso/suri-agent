@@ -6,6 +6,8 @@
 
 **关键约束**：只做调度，不执行业务逻辑，不调用 LLM，不决定任务内容。调度目标由角色和 task_planner 决定。
 
+---
+
 ## 功能需求
 
 ### 1. 优先级队列（PriorityQueue）
@@ -29,6 +31,7 @@
 - 角色发起 `llm.request` 后，task_scheduler 可注册等待
 - 使用 `asyncio.Event` 等待 `llm.response` 事件
 - LLM 等待超时：60 秒（独立配置）
+- **收到 `llm.error` 时**：不继续等待，直接触发 `task.failed`
 - 超时后触发 `task.timeout` 或降级策略
 
 ### 5. 任务状态流转
@@ -43,6 +46,18 @@ queued ──▶ running ──▶ completed
    └──▶ cancelled
 ```
 
+### 6. 与 agent_registry 的状态同步
+
+| 事件来源 | 事件 | task_scheduler 动作 | agent_registry 动作 |
+|---------|------|-------------------|-------------------|
+| task_scheduler | `task.completed` | 标记完成 | 订阅 → 同步 Agent 状态为 completed |
+| task_scheduler | `task.failed` | 标记失败 | 订阅 → 同步 Agent 状态为 failed |
+| task_scheduler | `task.timeout` | 标记超时 | 订阅 → 同步 Agent 状态为 timeout |
+| agent_registry | `agent.blocked` | 订阅 → 暂停对应任务 | 标记 Agent 为 blocked |
+| agent_registry | `agent.status_changed` | 订阅 → 触发对应任务状态同步 | 状态变更 |
+
+---
+
 ## 接口定义
 
 ### 订阅事件
@@ -54,7 +69,9 @@ queued ──▶ running ──▶ completed
 | `task.priority_changed` | 角色/系统 | 重新排序 |
 | `task.cancel_requested` | 角色/用户 | 取消任务 |
 | `llm.response` | llm_gateway | 唤醒等待的 LLM Event |
+| `llm.error` | llm_gateway | 触发 task.failed，不继续等待 |
 | `agent.status_changed` | agent_registry | Agent 状态变更，触发对应任务状态同步 |
+| `agent.blocked` | agent_registry | 暂停对应任务 |
 | `interrupt.retry_requested` | interrupt_handler | 重试被中断的任务 |
 | `interrupt.cancelled` | interrupt_handler | 取消被中断的任务 |
 
@@ -64,9 +81,9 @@ queued ──▶ running ──▶ completed
 |------|------|------|
 | `task.queued` | log_service | 任务已入队 |
 | `task.started` | log_service / 角色 | 任务开始执行 |
-| `task.completed` | log_service / role_learner / 角色 | 任务完成 |
-| `task.failed` | log_service / interrupt_handler / 角色 | 任务失败 |
-| `task.timeout` | log_service / interrupt_handler | 任务超时 |
+| `task.completed` | log_service / agent_registry / 角色 | 任务完成 |
+| `task.failed` | log_service / interrupt_handler / agent_registry | 任务失败 |
+| `task.timeout` | log_service / interrupt_handler / agent_registry | 任务超时 |
 | `task.cancelled` | log_service / 角色 | 任务被取消 |
 | `task.retried` | log_service | 任务重试 |
 
@@ -84,6 +101,8 @@ class TaskScheduler:
     def get_queue_status(self) -> Dict[str, Any]  # 队列长度/活跃数/等待数
 ```
 
+---
+
 ## 事件 Payload Schema
 
 ### 订阅事件
@@ -96,7 +115,16 @@ class TaskScheduler:
 | `executor_role` | string | 是 | 执行角色 ID |
 | `timeout` | integer | 否 | 超时（秒），默认 300 |
 | `project_id` | string | 否 | 所属项目 |
-| `payload` | object | 否 | 任务数据 |
+| `payload` | object | 否 | 任务数据（至少包含 messages、tool_calls、context） |
+
+**payload 结构**：
+```json
+{
+  "messages": [{"role": "user", "content": "..."}],
+  "tool_calls": [],
+  "context": {"session_id": "...", "agent_id": "..."}
+}
+```
 
 #### `task.plan_ready`
 | 字段 | 类型 | 必填 | 说明 |
@@ -119,13 +147,6 @@ class TaskScheduler:
 | `reason` | string | 否 | 取消原因 |
 | `requester` | string | 是 | 请求者 |
 
-#### `agent.step_ready`
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `agent_id` | string | 是 | Agent ID |
-| `step_id` | string | 是 | 步骤 ID |
-| `description` | string | 是 | 步骤描述 |
-
 #### `llm.response`
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -133,6 +154,13 @@ class TaskScheduler:
 | `content` | string | 是 | 模型响应内容 |
 | `model_id` | string | 是 | 使用的模型 |
 | `usage` | object | 否 | token 使用统计 |
+
+#### `llm.error`
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `request_id` | string | 是 | 对应请求 ID |
+| `error_code` | integer | 是 | 错误码 |
+| `error_message` | string | 是 | 错误描述 |
 
 ### 发布事件
 
@@ -185,6 +213,8 @@ class TaskScheduler:
 | `retry_number` | integer | 是 | 第几次重试 |
 | `next_retry_at` | string | 是 | 下次重试时间 |
 
+---
+
 ## 配置项
 
 ```yaml
@@ -203,23 +233,29 @@ task_scheduler:
     LOW: 3
 ```
 
+---
+
 ## 依赖关系
 
 - 上游：suri_core（EventBus）
-- 上游：llm_gateway（等待 LLM 响应）
+- 上游：llm_gateway（等待 LLM 响应 + 处理 LLM 错误）
 - 上游：task_planner（获取任务规划）
 - 下游：log_service（记录调度日志）
 - 下游：interrupt_handler（超时/失败时触发中断处理）
-- 下游：role_learner（任务完成后触发学习）
+- 下游：agent_registry（同步任务状态到 Agent）
+
+---
 
 ## 生命周期
 
 1. `init()` → 初始化 PriorityQueue、Semaphore、运行中任务字典
 2. `start()` → 启动调度主循环（消费者协程）
-3. `pause()` → 暂停新任务入队，等待运行中任务完成
-4. `resume()` → 恢复调度
+3. `pause()` → 暂停新任务入队，等待运行中任务完成。排队中的任务保留
+4. `resume()` → 恢复调度，排队中的任务继续执行
 5. `stop()` → 停止调度循环，取消所有排队任务，等待运行中任务完成或强制超时
 6. `cleanup()` → 释放 Semaphore、清空队列、持久化未完成任务状态
+
+---
 
 ## 安全边界
 
@@ -236,4 +272,4 @@ task_scheduler:
 | **状态类型** | 任务调度状态（queued / running / completed / failed / timeout / cancelled / retried） | Agent 执行状态（planning / running / blocked / paused / completed / cancelled） |
 | **状态更新方式** | 内部维护 + 发布事件 | 订阅 task.* 事件 + 角色直接调用 step_update |
 | **职责边界** | 管「什么时候执行」 | 管「执行得怎么样」 |
-| **协作方式** | task_scheduler 发布 task.completed/failed/timeout → agent_registry 订阅同步 Agent 状态 | agent_registry 发布 agent.status_changed → task_scheduler 订阅（如需调度联动） |
+| **协作方式** | task_scheduler 发布 task.completed/failed/timeout → agent_registry 订阅同步 Agent 状态 | agent_registry 发布 agent.blocked/status_changed → task_scheduler 订阅同步任务状态 |

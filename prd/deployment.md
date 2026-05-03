@@ -130,14 +130,43 @@ export LLM_API_KEY=""               # LLM 调用时填写
 
 ```bash
 python main.py
+# 或
+suri
 ```
 
-首次启动时：
-1. suri_core 自举注册
-2. PluginManager 扫描并加载所有插件
-3. 创建核心角色 suri（如不存在）
-4. 初始化 SQLite 数据库
-5. 等待用户输入
+首次启动时（`~/.suri/config.json` 不存在）：
+1. **弹出配置向导**（ConfigWizard）
+   - 步骤 1：选择 LLM 厂商（DeepSeek / Kimi / ChatGLM / 通义 / 文心）
+   - 步骤 2：输入 API Key（自动验证可用性）
+   - 步骤 3：配置 Telegram Bot（可选，/skip 跳过）
+   - 步骤 4：确认保存 → 生成 `~/.suri/config.json`
+2. suri_core 自举注册
+3. PluginManager 扫描并加载所有插件
+4. 创建核心角色 suri（如不存在）
+5. 初始化 SQLite 数据库
+6. 启动 CLI（和 Telegram，如配置启用）
+
+**跳过向导**：如不想走向导，可手动创建 `~/.suri/config.json`：
+```json
+{
+  "llm_gateway": {
+    "default_provider": "deepseek",
+    "providers": {
+      "deepseek": {
+        "models": ["deepseek-v4-pro", "deepseek-v4-flash"],
+        "base_url": "https://api.deepseek.com",
+        "api_key": "YOUR_KEY_HERE"
+      }
+    }
+  },
+  "access": {
+    "channels": {
+      "cli": {"enabled": true},
+      "telegram": {"enabled": false, "bot_token": ""}
+    }
+  }
+}
+```
 
 ### 开发模式启动
 

@@ -55,6 +55,7 @@ if __name__ == "__main__":
 - 4 个工作协程并行分发
 - SQLite 持久化高优先级事件，支持崩溃恢复
 - **PriorityQueue tie-breaker**：入队元组为 `(priority_value, counter, event)`，避免同优先级 Event 对象不可比较导致 `TypeError`
+- **事件持久化主键**：使用 SQLite 自增 ID 作为主键，`event_id` 列仅用于业务追踪，不参与主键约束。避免多个事件共享同一 `request_id` 时被 `INSERT OR IGNORE` 静默丢弃。
 - 标准事件类型：system.*、user.input、role.*、task.*、agent.*、llm.request/response、tool.call/result、error.*、plugin.*、upgrade.*、interrupt.*、doc_sync.*
 
 **关键约束**：EventBus 只做消息路由，不解析消息内容，不决定消息去向。路由目标由订阅者自己匹配。
@@ -63,6 +64,10 @@ if __name__ == "__main__":
 - 扫描路径：`plugins/` + `~/.suri/runtime/plugins/`
 - 生命周期：扫描 → 加载 → 初始化 → 注册 → 运行 → 暂停 → 卸载 → 清理
 - 依赖排序加载（拓扑排序）
+  - 构建反向图：`graph[name]` = 依赖 name 的节点集合
+  - 入度 = 当前节点依赖的节点数
+  - 入度为 0 的节点先加载（不依赖任何其他节点）
+  - 确保 A 依赖 B 时，B 在 A 之前加载
 - AST 静态安全扫描（禁止 socket/subprocess/eval/exec/__import__ 等）
 - **匹配规则**：精确匹配 `func_name == forbidden_api` 或 `func_name.endswith(f".{forbidden_api}")`，避免子字符串误报（如 `run_in_executor` 被 `exec` 误杀）
 - 配置隔离：每个插件只接收自己的配置子树

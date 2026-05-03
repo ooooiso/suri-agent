@@ -142,34 +142,43 @@ class PluginManager:
         return manifests
 
     def _topological_sort(self, manifests: Dict[str, Dict[str, Any]]) -> List[str]:
-        """按依赖关系拓扑排序插件加载顺序。"""
+        """按依赖关系拓扑排序插件加载顺序。
+        
+        使用 Kahn 算法：
+        - 入度 = 依赖当前节点的节点数（即被依赖数）
+        - 入度为 0 的节点先加载（没有其他节点依赖它）
+        - 但我们需要的是"先加载被依赖的节点"，所以：
+          - 构建反向图：graph[name] = 依赖 name 的节点集合
+          - 入度 = 当前节点依赖的节点数（即依赖数）
+          - 入度为 0 的节点先加载（不依赖任何其他节点）
+        """
         # 构建依赖图
-        graph: Dict[str, Set[str]] = {}
-        in_degree: Dict[str, int] = {}
+        # graph[name] = 依赖 name 的节点集合（反向图）
+        graph: Dict[str, Set[str]] = {name: set() for name in manifests}
+        # in_degree[name] = name 依赖的节点数
+        in_degree: Dict[str, int] = {name: 0 for name in manifests}
         
         for name, manifest in manifests.items():
             deps = set(manifest.get("dependencies", []))
-            graph[name] = deps
-            in_degree[name] = in_degree.get(name, 0)
-        
-        # 计算入度
-        for name, deps in graph.items():
             for dep in deps:
                 if dep in manifests:
-                    in_degree[name] = in_degree.get(name, 0) + 1
+                    # dep 被 name 依赖
+                    graph[dep].add(name)
+                    # name 依赖 dep
+                    in_degree[name] += 1
         
-        # Kahn 算法
+        # Kahn 算法：先加载入度为 0 的节点（不依赖任何其他节点）
         queue = [n for n, d in in_degree.items() if d == 0]
         result = []
         
         while queue:
             node = queue.pop(0)
             result.append(node)
-            for name, deps in graph.items():
-                if node in deps:
-                    in_degree[name] -= 1
-                    if in_degree[name] == 0:
-                        queue.append(name)
+            # node 已加载，所有依赖 node 的节点入度减 1
+            for dependent in graph[node]:
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0:
+                    queue.append(dependent)
         
         # 处理循环依赖：未排序的插件放到最后
         for name in manifests:

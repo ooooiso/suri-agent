@@ -101,6 +101,8 @@ class ConfigServicePlugin(PluginInterface):
     async def _on_command(self, event: Event) -> None:
         """处理命令。"""
         cmd = event.payload.get("command", "")
+        args = event.payload.get("args", [])
+        
         if cmd == "reload":
             self._load_config()
             await self._event_bus.publish(Event(
@@ -109,6 +111,14 @@ class ConfigServicePlugin(PluginInterface):
                 payload={"reason": "manual_reload"},
                 priority=Priority.NORMAL,
             ))
+        elif cmd == "config":
+            key = args[0] if args else None
+            if key:
+                value = self.get(key, "<not set>")
+                print(f"  {key} = {value}")
+            else:
+                import json
+                print(json.dumps(self._config, indent=2, ensure_ascii=False))
 
     async def _on_config_changed(self, event: Event) -> None:
         """配置变更时重新加载。"""

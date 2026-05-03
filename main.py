@@ -2,8 +2,18 @@
 """Suri Agent 入口文件，<20 行核心逻辑。"""
 
 import asyncio
+import locale
 import sys
 from pathlib import Path
+
+# 设置 locale 为 UTF-8，避免编码问题
+try:
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+except locale.Error:
+    try:
+        locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+    except locale.Error:
+        pass  # 忽略，保持默认
 
 # 将项目根目录加入路径
 sys.path.insert(0, str(Path(__file__).parent))

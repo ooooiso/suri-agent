@@ -1,0 +1,18 @@
+{
+  "manifest_version": "1.0",
+  "name": "agent_registry",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "capability",
+  "description": "Agent 生命周期管理，创建、跟踪、查询 Agent 状态",
+  "permissions": ["agent.*", "task.*"],
+  "event_subscriptions": ["task.planned", "task.completed", "task.failed", "task.timeout", "agent.block_requested"],
+  "dependencies": ["suri_core"],
+  "config_schema": {
+    "agent_registry": {
+      "enabled": { "type": "boolean", "default": true },
+      "max_agents_per_user": { "type": "integer", "default": 50, "min": 1, "max": 500 }
+    }
+  }
+}
