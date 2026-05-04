@@ -33,7 +33,7 @@
 
 | 事件 | 发布者 | 订阅者 | 优先级 | 持久化 |
 |------|--------|--------|--------|--------|
-| `system.start` | suri_core | 所有插件 | CRITICAL | ✅ |
+| `system.started` | suri_core | 所有插件 | CRITICAL | ✅ |
 | `system.shutdown` | suri_core / access | 所有插件 | CRITICAL | ✅ |
 | `system.heartbeat` | 所有插件 | suri_core | NORMAL | ❌ |
 | `system.plugin_loaded` | suri_core | log_service / test_framework | NORMAL | ❌ |
@@ -93,6 +93,7 @@
 | `role.destroyed` | role_manager | 所有角色 | NORMAL | ✅ |
 | `role.skill_suggested` | role_learner | role_manager | NORMAL | ✅ |
 | `role.skill_invoked` | role_manager | 角色 | NORMAL | ❌ |
+| `role.context_ready` | role_manager | 目标角色 | HIGH | ✅ |
 
 #### 角色通信事件链（role_comm — 完整的事件驱动流程）
 
@@ -174,6 +175,8 @@
 |------|--------|--------|--------|--------|
 | `cron.{rule_id}` | cron_service | 目标角色 | NORMAL | ❌ |
 | `upgrade.check_requested` | cron_service | upgrade_manager | NORMAL | ❌ |
+| `monitor.health_check` | monitor | suri_core / log_service | NORMAL | ❌ |
+| `monitor.alert` | monitor | access / log_service | HIGH | ✅ |
 
 ### 文档同步事件
 
@@ -194,11 +197,12 @@
 
 | 事件 | 发布者 | 订阅者 | 优先级 | 持久化 |
 |------|--------|--------|--------|--------|
-| `learning.report_generated` | role_learner | upgrade_manager | HIGH | ✅ |
+| `upgrade.report_generated` | role_learner | upgrade_manager | HIGH | ✅ |
 | `upgrade.report_saved` | upgrade_manager | log_service | NORMAL | ✅ |
 | `upgrade.status_changed` | upgrade_manager | log_service | NORMAL | ❌ |
 | `upgrade.reports_pending` | upgrade_manager | suri 角色 | NORMAL | ❌ |
 | `upgrade.implemented` | upgrade_manager | log_service | NORMAL | ✅ |
+| `upgrade.rollback_completed` | upgrade_manager | log_service / suri 角色 | NORMAL | ✅ |
 
 ### 钩子事件
 

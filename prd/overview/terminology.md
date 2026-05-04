@@ -11,7 +11,7 @@
 | **suri** | 主人 Agent（第一性智能体），系统唯一的 `core` 类型角色。按自己的 Soul 处理业务、自我进化、调度角色、维护系统 |
 | **角色（Agent）** | 独立智能体，拥有 Soul/技能/记忆/学习能力。每个角色通过 skill 文件定义能力，通过 role_comm 通信 |
 | **角色类型** | `core`（唯一，suri）/ `worker`（工作）/ `project_director`（项目总监）/ `admin`（管理） |
-| **角色状态** | `created` / `ready` / `busy` / `blocked` / `upgrading` / `archived` / `deleted` |
+| **角色状态** | `created` / `ready` / `busy` / `blocked` / `upgrading` / `archived` / `deleted`。提示：`upgrading` 状态角色 **可继续学习**（role_learner 异步分析不阻塞升级流程） |
 
 ## 核心配置文件
 

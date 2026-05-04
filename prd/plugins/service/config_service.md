@@ -67,7 +67,7 @@ config_service:
 
 ### 订阅事件
 
-#### `system.start`
+#### `system.started`
 触发配置加载，无特定 payload。
 
 ### 发布事件

@@ -138,7 +138,7 @@ async def _dispatch(self, event):
 ```
 
 **规则**：
-- 角色数据存储在 `~/.suri/runtime/roles/{role_id}/` 目录下
+- 角色数据存储在 `roles/{role_id}/` 目录下（Git 管理）
 - 插件逻辑在 `plugins/{plugin_name}/` 目录下
 - 插件通过 role_manager 获取角色数据，不直接读取角色文件
 
@@ -177,7 +177,7 @@ async def _dispatch(self, event):
 | 配置 | `~/.suri/config.json` | 模型选择、超时时间 | ✅ |
 | 模板 | `~/.suri/data/templates/` | Soul 模板、任务模板 | ✅ |
 | 关键词 | `~/.suri/data/configs/` | 中断关键词 | ✅ |
-| 角色数据 | `~/.suri/runtime/roles/` | Soul 文件、技能 | ✅ |
+| 角色数据 | `roles/{role_id}/` | Soul 文件、技能、记忆 | ✅ |
 | 插件数据 | `~/.suri/data/plugins/` | 各插件专属数据 | ✅ |
 | 代码逻辑 | `plugins/{name}/plugin.py` | 事件处理、业务逻辑 | ❌（需升级流程）|
 
@@ -268,50 +268,42 @@ class TaskPlannerPlugin:
 
 ## 六、角色与项目固化原则
 
-### 关键原则：由实际运行决定角色和项目归属
+### 关键原则：角色数据全部在 roles/ 下，纳入版本控制
 
-**问题**：如果在代码仓库里角色和项目数据与主程序混在一起，迁移时无法只迁移业务数据，必须连同整个仓库一起复制。
+**设计定位**：suri-agent 是"末日程序"，角色数据（Soul 定义、记忆、技能、产出）比代码更宝贵。Git clone 即可恢复全部角色状态。
 
-**解决方案**：
-
-```
-角色和项目不属于代码仓库，属于运行环境
-  ├── roles/ 目录中的角色模板 → 复制到 ~/.suri/runtime/roles/ 后独立运行
-  ├── works/ 目录中的项目数据 → 复制到 ~/.suri/runtime/works/ 后独立运行
-  └── 主程序（框架 + 插件）→ 可独立升级，不影响角色和项目
-```
-
-**首次运行流程**：
+**策略**：
 
 ```
-首次运行 start.sh
-    │
-    ├── 检查 ~/.suri/ 是否存在
-    │   ├── 存在 → 跳过初始化
-    │   └── 不存在 →
-    │       │
-    │       ▼
-    │   1. 创建 ~/.suri/config.yaml（LLM 配置等）
-    │   2. 检查 roles/ 目录 → 复制到 ~/.suri/runtime/roles/
-    │   3. 检查 works/ 目录 → 复制到 ~/.suri/runtime/works/
-    │   4. 检查 plugins/ 目录 → 复制到 ~/.suri/runtime/plugins/
-    │   5. 启动 suri_core
-    │
-    ▼
-系统就绪
+roles/（Git 管理，包含全部角色数据，可迁移可回溯）
+  ├── soul.md         ← 角色定义与职责描述
+  ├── memories/       ← 角色记忆、insights
+  ├── skills/         ← 角色技能文件
+  └── output/         ← 角色产出文件
+
+代码仓库（仅存放代码逻辑）
+  ├── plugins/        ← 插件代码
+  ├── agent_framework/ ← 框架代码
+  └── main.py         ← 入口
+
+~/.suri/（仅系统级敏感配置 + 运行时日志，不纳入 Git）
+  ├── config.json    ← API Key、模型选择等敏感配置
+  └── runtime/logs/  ← 运行时日志
 ```
 
 **迁移到新机器的标准步骤**：
 
 ```
-1. 在新机器上部署主程序（clone 或下载）
-2. 从旧机器复制 ~/.suri/runtime/roles/ 到新机器
-3. 从旧机器复制 ~/.suri/runtime/works/ 到新机器
-4. 运行 start.sh → 系统自动检测角色和项目 → 直接运行
-
-可选：
-  也可以从旧机器复制整个 ~/.suri/ 目录（包含配置、记忆、升级记录等）
+1. git clone <repo-url>              # 代码 + 角色数据一次性拉取
+2. 复制 ~/.suri/config.json          # 单独复制敏感配置
+3. 运行 main.py → 系统直接就绪       # 角色数据无需额外操作
 ```
+
+**与代码仓库的关系**：
+- ✅ 角色数据在 `roles/` 下随 Git 一起管理版本
+- ✅ 可单独使用 `roles/` 子目录做角色备份恢复
+- ❌ 不是"模板复制到运行时"模式——角色数据自包含、自解释
+- ❌ 敏感配置（API Key）不进入 Git，保持在 `~/.suri/config.json`
 
 ---
 

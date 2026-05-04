@@ -29,9 +29,11 @@ suri-agent/                        # 项目根目录（Git 管理全部）
     - event_bus/                   # 事件总线：asyncio.Queue + 发布订阅
       - __init__.py
       - bus.py                     # EventBus 实现
-    - suri_core_plugin/            # 内核插件实现：自举注册、协调
-      - __init__.py
-      - plugin.py                  # SuriCorePlugin 实现
+    - core/                        # 核心层子模块
+      - suri_core/                 # 内核插件实现：自举注册、协调
+        - __init__.py
+        - plugin.py                # SuriCorePlugin 实现
+        - manifest.json            # 内核插件清单
     - migrations/                  # 数据库迁移脚本（按版本号排序）
       - 001_initial.sql            # 初始 schema
   - plugins/                       # 插件层（20 个插件）
@@ -101,10 +103,6 @@ suri-agent/                        # 项目根目录（Git 管理全部）
       - writer.py                  # write_file / append_file / create_file ✅（迭代 1 已实现）
       - test_runner.py             # [迭代 2 解锁]
       - executor.py                # [迭代 2 解锁]
-    - suri_core/                   # 内核插件（与 agent_framework/ 协同）
-      - __init__.py
-      - manifest.json
-      - plugin.py                  # 内核插件实现
   - shared/                        # 公共层（禁止包含业务逻辑）
     - __init__.py
     - interfaces/                  # 插件接口定义

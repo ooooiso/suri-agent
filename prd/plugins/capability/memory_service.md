@@ -125,7 +125,7 @@ CREATE TABLE memory_patterns (
 ## 三、接口定义
 
 ### 3.1 订阅事件
-- `system.start` → 初始化所有角色的数据库
+- `system.started` → 初始化所有角色的数据库
 
 ### 3.2 发布事件
 - 不发布事件（纯服务插件）
@@ -164,7 +164,7 @@ memory_service:
 
 ### 5.1 订阅事件
 
-#### `system.start`
+#### `system.started`
 触发初始化，无特定 payload。
 
 ### 5.2 发布事件

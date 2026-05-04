@@ -49,13 +49,13 @@ class TestEventBus(unittest.TestCase):
                 received.append(event.event_type)
             
             bus.subscribe("system.*", handler)
-            await bus.publish(Event(event_type="system.start", source="test", priority=Priority.HIGH))
-            await bus.publish(Event(event_type="system.ready", source="test", priority=Priority.HIGH))
-            await asyncio.sleep(0.2)
-            
-            self.assertEqual(len(received), 2)
-            self.assertIn("system.start", received)
-            self.assertIn("system.ready", received)
+        await bus.publish(Event(event_type="system.started", source="test", priority=Priority.HIGH))
+        await bus.publish(Event(event_type="system.ready", source="test", priority=Priority.HIGH))
+        await asyncio.sleep(0.2)
+        
+        self.assertEqual(len(received), 2)
+        self.assertIn("system.started", received)
+        self.assertIn("system.ready", received)
             
             await bus.stop()
         

@@ -155,23 +155,39 @@ suri 接收并分析
 | 临时数据 | `/tmp/suri-agent/` | 解压文件、临时缓存 |
 | 备份数据 | `~/.suri/backup/` | 代码变更快照 |
 
-### 角色运行时数据
+### 角色数据存储
+
+**核心设计**：suri-agent 是"末日程序"，角色数据（Soul 定义、记忆、技能、产出）比代码更宝贵。因此角色全部数据统一存放在代码仓库的 `roles/` 目录下，纳入 Git 版本控制。
 
 ```
-~/.suri/runtime/roles/{role_id}/
+roles/（Git 管理，包含全部角色数据，git clone 即可恢复）
   ├── soul.md                 # 角色自我定义（可被 suri 更新）
   ├── skills/                 # 角色技能（可自学自增）
   │   └── {skill_name}_v{major}.{minor}.json
-  ├── memories/               # 角色记忆
+  ├── memories/               # 角色记忆与洞察
   │   ├── role.db (SQLite)
   │   └── insights/
   │       └── {timestamp}_{type}.md
+  ├── scripts/                # 角色自定义脚本
+  ├── reference/              # 角色参考资料
+  ├── output/                 # 角色产出文件
   └── meta.json               # 角色元数据（类型/创建时间/版本）
 ```
 
-**核心角色 suri** 的运行时数据位于 `~/.suri/runtime/roles/suri/`。
+**核心角色 suri** 的数据位于 `roles/suri/`。
 
-**代码仓库中的 `roles/` 目录** 仅作为角色模板/初始数据。
+**`~/.suri/`** 仅存放系统级敏感配置和运行时日志，不纳入 Git：
+```
+~/.suri/
+  ├── config.json             # API Key、模型选择等敏感配置（不进入 Git）
+  ├── data/                   # 中央数据（SQLite 数据库、升级报告）
+  │   ├── suri.db             # 中央 SQLite 数据库（事件记录、审计日志）
+  │   └── upgrade_reports/    # 升级报告存档
+  └── runtime/
+      ├── logs/               # 运行时日志
+      ├── sessions/           # 会话缓存
+      └── plugins/            # 动态插件运行时数据
+```
 
 ### SQLite 表结构
 
@@ -345,31 +361,20 @@ bootstrap()：
 8. 预算超限后自动降级或拒绝
 ```
 
-### 10.2 上下文隔离规则
+### 10.2 上下文模型（详见 architecture.md）
+
+> 上下文模型的完整定义（5 层架构、三级缓存、生命周期管理）已在 `prd/overview/architecture.md` 第 7 章详细描述。
+> 本文件仅列出框架规则层面的关键约束。
 
 ```
 1. 每个 Task 拥有独立的 Context，互不干扰
-2. Context = system_layer + session_layer + task_layer + history_layer + memory_layer
-3. system_layer：角色 Soul + 技能（固定不变）
-4. session_layer：同会话内的 Task 共享（业务目标 + 已决策事项）
-5. task_layer：每个 Task 独立（任务描述 + 状态 + 依赖）
-6. history_layer：每个 Task 独立（对话历史，超限自动压缩）
-7. memory_layer：每个 Task 独立从角色记忆检索
-8. Agent 间通信是消息传递，不是上下文共享
+2. Agent 间通信是消息传递，不是上下文共享
+3. LLM 请求全走 llm_gateway，系统 prompt 在请求前刷新
+4. 数据写入必须幂等（支持重试不造成重复）
+5. context 变更须广播事件通知相关方
 ```
 
-### 10.3 上下文缓存规则
-
-```
-1. 三级缓存：Hot Tier(内存) → Warm Tier(SQLite) → Cold Tier(磁盘)
-2. Hot Tier 默认容量 10，保留当前活跃 Task 的 Context
-3. Warm Tier 默认容量 100，保留挂起 Task 的完整 Context（JSON 序列化）
-4. Cold Tier 保留已完成 Task 的压缩摘要（LLM 生成）
-5. LRU 替换：Hot 满 → 最旧移到 Warm；Warm 满 → 最旧压缩移到 Cold
-6. Warm → Hot 反序列化恢复，Cold → Hot 需基于摘要重新生成
-```
-
-### 10.4 上下文压缩规则
+### 10.3 上下文压缩规则
 
 ```
 1. history_layer token 数超过阈值（默认 40K）时自动压缩
@@ -378,7 +383,7 @@ bootstrap()：
 4. 压缩异步执行，不阻塞当前 LLM 请求
 ```
 
-### 10.5 任务派生规则
+### 10.4 任务派生规则
 
 ```
 1. Task 派生子任务时，Context.clone() 继承父 Context

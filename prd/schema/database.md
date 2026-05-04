@@ -37,6 +37,7 @@ CREATE TABLE events (
     event_type  TEXT NOT NULL,
     source      TEXT NOT NULL,           -- 发布者 plugin_id / role_id
     target      TEXT,                    -- 定向目标（可选）
+    session_id  TEXT,                    -- 关联会话 ID
     payload     TEXT,                    -- JSON
     priority    TEXT NOT NULL,           -- CRITICAL / HIGH / NORMAL / LOW
     timestamp   TEXT NOT NULL,
@@ -45,6 +46,7 @@ CREATE TABLE events (
 
 CREATE INDEX idx_events_type      ON events(event_type);
 CREATE INDEX idx_events_source    ON events(source);
+CREATE INDEX idx_events_session   ON events(session_id);
 CREATE INDEX idx_events_timestamp ON events(timestamp);
 CREATE INDEX idx_events_consumed  ON events(consumed) WHERE consumed = 0;
 ```
@@ -200,10 +202,10 @@ CREATE TABLE tasks (
 CREATE INDEX idx_tasks_session ON tasks(session_id);
 ```
 
-### `messages` — 角色会话消息
+### `session_messages` — 角色会话消息
 
 ```sql
-CREATE TABLE messages (
+CREATE TABLE session_messages (
     message_id  TEXT PRIMARY KEY,
     session_id  TEXT NOT NULL,
     role        TEXT NOT NULL,          -- 'user' 或 role_id
@@ -211,7 +213,7 @@ CREATE TABLE messages (
     timestamp   TEXT
 );
 
-CREATE INDEX idx_messages_session ON messages(session_id);
+CREATE INDEX idx_session_messages_sid ON session_messages(session_id);
 ```
 
 ### `approvals` — 角色相关审批

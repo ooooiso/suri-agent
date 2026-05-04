@@ -37,7 +37,7 @@ class SuriCorePlugin(PluginInterface):
         2. 初始化 PluginManager
         3. 自注册
         4. 加载其他插件
-        5. 发布 system.start
+        5. 发布 system.started
         """
         # 确保运行时目录存在
         runtime_dir = Path.home() / ".suri" / "runtime"
@@ -66,9 +66,9 @@ class SuriCorePlugin(PluginInterface):
         # 4. 加载其他插件
         await self._plugin_manager.load_all()
         
-        # 5. 发布 system.start
+        # 5. 发布 system.started
         start_event = Event(
-            event_type="system.start",
+            event_type="system.started",
             source="suri_core",
             payload={
                 "version": "1.0.0",
@@ -154,7 +154,7 @@ class SuriCorePlugin(PluginInterface):
                    (plugin_id, name, version, type, path, status, capabilities)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 ("suri_core", "suri_core", "1.0.0", "core", 
-                 "agent_framework/suri_core_plugin", "active", "[event_bus, plugin_manager]"),
+                 "agent_framework/core/suri_core", "active", "[event_bus, plugin_manager]"),
             )
             conn.commit()
             conn.close()

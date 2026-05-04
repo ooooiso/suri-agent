@@ -34,7 +34,7 @@ bootstrap()：
   5. 扩展层（cron_service / hooks_service / test_framework / doc_sync）
     │
     ▼
-发布 system.start 事件
+发布 system.started 事件
     │
     ▼
 系统就绪，等待用户输入

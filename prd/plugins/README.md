@@ -7,76 +7,78 @@
 > 2. 一切任务基于角色协同，和程序无关
 > 3. **所有插件概念统一，按功能分 6 层**
 
-## 插件清单（23 个）
+## 插件清单（23 个，含实现状态）
+
+> 📗 = 代码已实现  📕 = 占位待开发  📘 = PRD 有定义代码未实现
 
 ```
 23 个插件分 6 层：
-├─ 内核层（1）    核心 ↪  core/
-├─ 基础服务层（3） 服务 ↪  service/
-├─ 执行层（6）    执行 ↪  execution/
-├─ 能力层（8）    能力 ↪  capability/
-├─ 接入层（1）    接入 ↪  access/
-└─ 扩展层（5）    扩展 ↪  extension/
+├─ 内核层（1）     核心 ↪  core/
+├─ 基础服务层（3）  服务 ↪  service/
+├─ 执行层（6）     执行 ↪  execution/
+├─ 能力层（7）     能力 ↪  capability/
+├─ 接入层（1）     接入 ↪  access/（含 7 子组件）
+└─ 扩展层（5）     扩展 ↪  extension/
 ```
 
 ### 内核层 `core/`
 
-| 插件 | 文件 | 职责 |
-|------|------|------|
-| **suri_core** | `core/suri_core.md` | 内核核心。EventBus + PluginManager。自举注册 |
+| 插件 | 文件 | 职责 | 状态 |
+|------|------|------|------|
+| **suri_core** | `core/suri_core.md` | 内核核心。EventBus + PluginManager。自举注册 | 📗 已实现 |
 
 ### 基础服务层 `service/`
 
-| 插件 | 文件 | 职责 |
-|------|------|------|
-| config_service | `service/config_service.md` | 统一配置中心 |
-| log_service | `service/log_service.md` | 分级日志、分类归档 |
-| security_service | `service/security_service.md` | 权限校验、审批流程 |
+| 插件 | 文件 | 职责 | 状态 |
+|------|------|------|------|
+| config_service | `service/config_service.md` | 统一配置中心 | 📗 已实现 |
+| log_service | `service/log_service.md` | 分级日志、分类归档 | 📗 已实现 |
+| security_service | `service/security_service.md` | 权限校验、审批流程 | 📗 已实现 |
 
 ### 执行层 `execution/`
 
-| 插件 | 文件 | 职责 |
-|------|------|------|
-| task_scheduler | `execution/task_scheduler.md` | 任务优先级队列、并发控制、超时重试 |
-| task_planner | `execution/task_planner.md` | 任务分解、DAG 依赖管理、预设模板 |
-| agent_registry | `execution/agent_registry.md` | Agent 生命周期、状态跟踪、进度查询 |
-| interrupt_handler | `execution/interrupt_handler.md` | 中断分类、自动重试、用户决策 |
-| role_comm | `execution/role_comm.md` | 角色间通信、持久化队列 |
-| code_tool | `execution/code_tool.md` | 文件读写、搜索、统计 |
+| 插件 | 文件 | 职责 | 状态 |
+|------|------|------|------|
+| task_scheduler | `execution/task_scheduler.md` | 任务优先级队列、并发控制、超时重试 | 📗 已实现 |
+| task_planner | `execution/task_planner.md` | 任务分解、DAG 依赖管理、预设模板 | 📗 已实现 |
+| agent_registry | `execution/agent_registry.md` | Agent 生命周期、状态跟踪、进度查询 | 📗 已实现 |
+| interrupt_handler | `execution/interrupt_handler.md` | 中断分类、自动重试、用户决策 | 📗 已实现 |
+| code_tool | `execution/code_tool.md` | 文件读写、搜索、统计 | 📗 已实现 |
+| role_comm | `execution/role_comm.md` | 角色间通信、持久化队列 | 📘 文档就绪待开发 |
 
 ### 能力层 `capability/`
 
-| 插件 | 文件 | 职责 |
-|------|------|------|
-| llm_gateway | `capability/llm_gateway.md` | 大模型统一网关 |
-| memory_service | `capability/memory_service.md` | 角色级 SQLite 记忆存储 |
-| wiki_service | `capability/wiki_service.md` | ⭐ Wiki 知识库(LLM驱动) |
-| role_manager | `capability/role_manager.md` | 角色生命周期、Soul 管理 |
-| role_learner | `capability/role_learner.md` | 角色自学习、技能检测 |
-| mcp_framework | `capability/mcp_framework.md` | MCP 协议、工具注册发现 |
-| upgrade_manager | `capability/upgrade_manager.md` | 升级报告状态机、回滚管理 |
+| 插件 | 文件 | 职责 | 状态 |
+|------|------|------|------|
+| llm_gateway | `capability/llm_gateway.md` | 大模型统一网关 | 📗 已实现 |
+| role_manager | `capability/role_manager.md` | 角色生命周期、Soul 管理 | 📗 已实现 |
+| memory_service | `capability/memory_service.md` | 角色级 SQLite 记忆存储 | 📘 文档就绪待开发 |
+| role_learner | `capability/role_learner.md` | 角色自学习、技能检测 | 📘 文档就绪待开发 |
+| wiki_service | `capability/wiki_service.md` | ⭐ Wiki 知识库(LLM驱动) | 📘 文档就绪待开发 |
+| mcp_framework | `capability/mcp_framework.md` | MCP 协议、工具注册发现 | 📘 文档就绪待开发（V2.0） |
+| upgrade_manager | `capability/upgrade_manager.md` | 升级报告状态机、回滚管理 | 📘 文档就绪待开发 |
 
 ### 接入层 `access/`
 
-| 组件 | 文件 | 职责 |
-|------|------|------|
-| **session-hub** | `access/session-hub.md` | ★ 会话中枢。会话管理、统一协议、事件路由、通道注册/发现、能力协商 |
-| **CLI 通道** | `access/channels/cli.md` | 终端交互通道 |
-| **Telegram 通道** | `access/channels/telegram.md` | Telegram Bot 通道 |
-| **Web 通道** | `access/channels/web.md` | Web 端交互通道（占位） |
-| **桌面端通道** | `access/channels/desktop.md` | 桌面端原生通道（占位） |
-| config_editor | `access/config_editor.md` | 配置编辑器 |
-| wizard | `access/wizard.md` | 引导式配置器 |
+| 组件 | 文件 | 职责 | 状态 |
+|------|------|------|------|
+| **session-hub** | `access/session-hub.md` | ★ 会话中枢。会话管理、统一协议、事件路由、通道注册/发现、能力协商 | 📗 已实现 |
+| **CLI 通道** | `access/channels/cli.md` | 终端交互通道 | 📗 已实现 |
+| **Telegram 通道** | `access/channels/telegram.md` | Telegram Bot 通道 | 📗 已实现 |
+| **Web 通道** | `access/channels/web.md` | Web 端交互通道 | 📕 占位待开发 |
+| **桌面端通道** | `access/channels/desktop.md` | 桌面端原生通道 | 📕 占位待开发 |
+| config_editor | `access/config_editor.md` | 配置编辑器 | 📗 已实现 |
+| wizard | `access/wizard.md` | 引导式配置器 | 📗 已实现 |
 
 ### 扩展层 `extension/`
 
-| 插件 | 文件 | 职责 |
-|------|------|------|
-| test_framework | `extension/test_framework.md` | 自动化测试框架 |
-| cron_service | `extension/cron_service.md` | 定时触发事件 |
-| hooks_service | `extension/hooks_service.md` | 事件钩子、拦截扩展 |
-| doc_sync | `extension/doc_sync.md` | 文档同步、代码变更监控 |
-| monitor | `extension/monitor.md` | ⭐ 系统监控与运维 |
+| 插件 | 文件 | 职责 | 状态 |
+|------|------|------|------|
+| test_framework | `extension/test_framework.md` | 自动化测试框架 | 📗 已实现 |
+| doc_sync | `extension/doc_sync.md` | 文档同步、代码变更监控 | 📗 已实现 |
+| hooks_service | `extension/hooks_service.md` | 事件钩子、拦截扩展 | 📗 已实现 |
+| cron_service | `extension/cron_service.md` | 定时触发事件 | 📘 文档就绪待开发 |
+| monitor | `extension/monitor.md` | ⭐ 系统监控与运维 | 📘 文档就绪待开发 |
 
 
 ## 架构原则
@@ -238,7 +240,7 @@ suri_core（内核插件，自举注册）
 
 | 事件类型 | 发布者 | 消费者 | 说明 |
 |----------|--------|--------|------|
-| `system.start` | suri_core | 所有插件 | 系统启动完成 |
+| `system.started` | suri_core | 所有插件 | 系统启动完成 |
 | `system.shutdown` | suri_core / access | 所有插件 | 系统关闭信号 |
 | `system.config_changed` | config_service | 各插件 | 配置变更 |
 | `user.input` | access | suri（或其他角色） | 用户普通消息 |
@@ -246,8 +248,9 @@ suri_core（内核插件，自举注册）
 | `llm.request` | 角色 / task_scheduler | llm_gateway | LLM 调用请求 |
 | `llm.response` | llm_gateway | 角色 / task_scheduler | LLM 响应 |
 | `llm.error` | llm_gateway | 角色 | LLM 调用失败 |
-| `tool.call` | 角色 | mcp_framework | 工具调用请求 |
-| `tool.result` | mcp_framework | 角色 | 工具返回结果 |
+| `tool.call` | 角色 | code_tool / mcp_framework | 工具调用请求 |
+| `tool.result` | code_tool / mcp_framework | 角色 | 工具返回结果 |
+| `error.tool` | code_tool / mcp_framework | 角色 / log_service | 工具调用失败 |
 | `task.created` | 角色 | log_service / task_scheduler | 任务创建 |
 | `task.planned` | task_planner | task_scheduler / 角色 | 任务规划完成 |
 | `task.step_ready` | task_planner | task_scheduler | 步骤可执行 |
@@ -260,18 +263,38 @@ suri_core（内核插件，自举注册）
 | `agent.status_changed` | agent_registry | log_service / task_scheduler | Agent 状态变更 |
 | `agent.completed` | agent_registry | log_service / role_learner | Agent 完成 |
 | `agent.blocked` | agent_registry | log_service / interrupt_handler | Agent 受阻 |
-| `role.message_received` | role_comm | receiver 角色 | 新消息到达 |
+| `role.context_ready` | role_manager | suri 角色 | 上下文就绪，可开始处理 |
+| `role.message` | 角色（发送方） | role_comm | 角色发送消息（输入事件） |
+| `role.message_received` | role_comm | 目标角色 | 角色收到新消息通知 |
+| `role.messages_batch` | role_comm | 目标角色 | 批量消息投递 |
+| `role.messages_query` | 角色 | role_comm | 查询未读消息/历史 |
+| `role.messages_consume` | 角色 | role_comm | 消费消息（标记已读） |
+| `role.message_delivered` | role_comm | 发送方角色 | 消息投递成功 |
 | `role.skill_suggested` | role_learner | role_manager | 技能建议 |
-| `role.skill_registered` | role_manager | template_updater | 技能注册 |
 | `cron.{rule_id}` | cron_service | 角色 | 定时事件 |
+| `interrupt.handled` | interrupt_handler | log_service / 角色 | 中断已处理 |
+| `interrupt.escalated` | interrupt_handler | role_comm / 目标角色 | 中断已升级 |
+| `interrupt.user_decision_needed` | interrupt_handler | access | 需要用户决策 |
 | `error.*` | 任意插件 | log_service | 错误事件 |
+| `error.system` | suri_core | log_service / access | 系统级错误 |
+| `error.security` | security_service | log_service / access | 安全相关错误 |
+| `error.plugin` | suri_core | log_service / access | 插件错误 |
+| `error.test` | test_framework | log_service / access | 测试错误 |
 | `test.completed` | test_framework | log_service | 测试完成 |
 | `upgrade.report_saved` | upgrade_manager | log_service | 报告已保存 |
 | `upgrade.reports_pending` | upgrade_manager | suri 角色 | 有待处理报告 |
-| `interrupt.escalated` | interrupt_handler | role_comm / 目标角色 | 中断已升级 |
+| `upgrade.implemented` | upgrade_manager | log_service | 升级已实施 |
+| `upgrade.rollback_completed` | upgrade_manager | log_service / suri 角色 | 回滚完成 |
 | `doc_sync.suggestion_created` | doc_sync | access / suri 角色 | 文档更新建议 |
-| `role_manager.templates_updated` | template_updater | role_manager | 模板已更新 |
-| `task_planner.templates_updated` | template_updater | task_planner | 模板已更新 |
+| `doc_sync.applied` | doc_sync | log_service | 文档更新已应用 |
+| `doc_sync.ignored` | doc_sync | log_service | 文档更新已忽略 |
+| `hooks.file_changed` | hooks_service | doc_sync / security_service | 文件变更 |
+| `hooks.file_created` | hooks_service | doc_sync | 文件创建 |
+| `hooks.file_deleted` | hooks_service | doc_sync | 文件删除 |
+| `security.approval_required` | security_service | access / interrupt_handler | 审批请求 |
+| `monitor.alert` | monitor | access / log_service | 监控告警 |
+| `plugin.upgrade_proposed` | 任意插件 | suri_core / upgrade_manager | 插件升级提议 |
+| `role_manager.templates_updated` | role_manager | 相关方 | 模板已更新 |
 
 ---
 
@@ -283,7 +306,7 @@ suri_core（内核插件，自举注册）
 
 | 插件 | 暴露事件 | 暴露工具 | 命令 |
 |------|---------|---------|------|
-| **suri_core** | `system.start`, `system.shutdown` | 无 | 无 |
+| **suri_core** | `system.started`, `system.shutdown` | 无 | 无 |
 
 ### 基础服务层
 

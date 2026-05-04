@@ -1,159 +1,104 @@
-# 工具进化
+# 工具进化（Tool Evolution）
 
-> 定义 Tool 维度的进化机制 —— MCP 工具的注册、更新、废弃、自动同步。
-
----
-
-## 一、工具来源
-
-工具（Tool）是角色调用的能力单元，来源包括：
-
-| 来源 | 说明 | 注册方式 |
-|------|------|---------|
-| **插件暴露** | 插件通过 manifest.json exposes.tools 声明 | 插件加载时自动注册 |
-| **MCP 框架** | 通过 MCP 协议注册的外部工具 | mcp_framework 注册 |
-| **suri 开发** | suri 为角色开发的专用工具 | suri 写入后注册 |
-| **插件自进化** | 插件进化过程中新增的工具 | 自修改流程注册 |
+> 定义 suri-agent 中 MCP 工具和插件工具的进化机制。工具进化包括工具的注册、版本管理、废弃和迁移。
 
 ---
 
-## 二、工具生命周期
+## 一、工具定义
 
-```
-工具注册（tool.registered）
-    │
-    ▼
-工具活跃（可使用）
-    │
-    ├── 被角色调用（tool.call / tool.result）
-    │
-    ├── 工具更新（tool.updated）
-    │   ├── 参数变更
-    │   ├── 逻辑优化
-    │   └── 版本递进
-    │
-    ├── 工具废弃（tool.deprecated）
-    │   └── 仍然可用，但建议迁移
-    │
-    └── 工具移除（tool.unregistered）
-        └── 不再可用
-```
+在 suri-agent 中，"工具"指角色可通过 mcp_framework 调用的一切能力：
 
----
-
-## 三、工具注册
-
-```
-工具注册流程：
-  1. 来源方生成工具定义（名称/描述/参数/返回格式）
-  2. 写入 ~/.suri/data/templates/tool_descriptions.yaml
-  3. 广播 tool.registered 事件
-  4. 自动更新 tool_descriptions.yaml 索引
-  5. 所有角色在下一次 llm.request 时获取最新工具列表
-
-工具定义格式（YAML）：
-  tool_name:
-    description: "工具的用途描述"
-    input_schema:
-      type: object
-      properties:
-        param1:
-          type: string
-          description: "参数说明"
-      required: ["param1"]
-    output:
-      type: object
-      description: "返回值说明"
-    visibility: "all | role:{role_type} | private"
-    source: "plugin:{plugin_name} | mcp | suri"
-```
-
----
-
-## 四、工具更新
-
-| 变更类型 | 兼容性 | 影响 |
+| 工具类型 | 提供方 | 示例 |
 |---------|--------|------|
-| 新增可选参数 | 兼容 | 自动生效 |
-| 修改参数描述 | 兼容 | 自动生效 |
-| 新增必填参数 | 中断性变更 | 通知所有使用该工具的角色 |
-| 删除参数 | 不兼容 | 回滚或用户决策 |
-| 修改返回值格式 | 中断性变更 | 通知所有使用该工具的角色 |
+| MCP 工具 | 外部 MCP 服务器 | 搜索、计算器、API 调用 |
+| 插件工具 | 插件声明的 expose.tools | code_tool 的文件操作 |
+| 内建工具 | suri_core 自带 | 事件总线查询、插件注册表查询 |
+| skill 工具 | 角色自身的 skill | 自动化脚本、模板引擎 |
 
-**更新流程**：
-1. 来源方提交工具更新
-2. 更新 tool_descriptions.yaml 中的定义
-3. 广播 tool.updated 事件（含变更摘要和兼容性评估）
-4. 使用该工具的角色收到事件后：
-   - 兼容：自动使用新定义
-   - 中断性变更：当前步骤继续使用旧定义，新步骤使用新定义
-   - 不兼容：suri 介入评估
-
----
-
-## 五、工具废弃与移除
-
-### 废弃流程
+## 二、工具版本管理
 
 ```
-suri 或来源方决定废弃某个工具
-    │
-    ├── 标记 tool_descriptions.yaml 中为 deprecated
-    ├── 广播 tool.deprecated（含替代方案和迁移期限）
-    ├── 角色收到后在指定期限内迁移
-    └── 过期后自动移除
+工具注册时声明：
+  name: string           # 工具名（全局唯一）
+  version: string        # semver 格式
+  api_version: string    # 接口版本（向后兼容检查用）
+  provider: string       # 提供方标识（plugin_id / mcp_server_id）
+
+版本兼容规则：
+  major 相同 → 向前兼容，直接升级
+  major 不同 → 不兼容，需要迁移
 ```
 
-### 移除流程
+## 三、工具进化触发条件
+
+| 触发条件 | 触发方 | 说明 |
+|---------|--------|------|
+| 插件升级 | plugin_manager | 插件升级时更新声明工具 |
+| MCP 服务变更 | mcp_framework | 外部 MCP 服务版本变更 |
+| 工具废弃 | 管理员/suri | 工具不再维护，标记为 DEPRECATED |
+| 新工具注册 | 插件/MCP | 提供新的工具能力 |
+
+## 四、工具注册流程
 
 ```
-1. 确认无角色使用该工具（或已全部迁移）
-2. 从 tool_descriptions.yaml 移除
-3. 广播 tool.unregistered
-4. 清理能力索引
-```
-
----
-
-## 六、tool_descriptions.yaml 自动同步
-
-`~/.suri/data/templates/tool_descriptions.yaml` 是系统统一的工具描述文件，所有角色的工具列表从中读取。
-
-**同步机制**：
-
-```
-工具变更（注册/更新/废弃/移除）
+新工具准备就绪
     │
     ▼
-更新 tool_descriptions.yaml
+发布 tool.registered 事件（含完整 tool_catalog）
     │
     ▼
-广播相应事件（tool.registered / tool.updated 等）
+mcp_framework 更新工具注册表
     │
     ▼
-各角色在下一次 llm.request 前
-    ├── 重新读取 tool_descriptions.yaml
-    └── 获取最新工具列表
+通知所有插件（system.config_changed 或 tool.registered）
+    │
+    ▼
+插件刷新可用工具列表
 ```
 
-**注意**：tool_descriptions.yaml 的变更不会影响正在执行的 tool call。当前步骤的工具调用使用步骤开始时加载的工具定义。新步骤使用最新的工具定义。
+## 五、工具废弃流程
 
----
+```
+工具被标记为 DEPRECATED
+    │
+    ▼
+发布 tool.deprecated 事件（含替代工具名）
+    │
+    ▼
+mcp_framework 保留但标记 DEPRECATED
+    │
+    ▼
+通知所有订阅者
 
-## 七、工具进化与四维协同
+版本迁移周期：
+  1. DEPRECATED 标记保留 2 个主版本
+  2. 2 个主版本后自动移除
+  3. 移除前通知所有已知调用方
+```
 
-| 工具进化事件 | 触发方 | 影响方 |
-|-------------|--------|--------|
-| `tool.registered` | 插件/suri/MCP | 所有角色的工具列表更新 |
-| `tool.updated` | 插件/suri/MCP | 使用该工具的角色 |
-| `tool.deprecated` | suri | 使用该工具的角色 |
-| `tool.unregistered` | suri | 能力索引清理 |
-| `tool.call_failed` | 角色 | 工具来源方（分析改进） |
+## 六、工具发现机制
 
-**工具进化 → 技能进化**：
-- 新工具注册后，role_learner 可能检测到角色使用新工具的模式 → 生成新技能
-- 工具废弃后，引用该工具的技能需要标记为需更新
+```
+角色需要某工具时：
+  1. 查询 mcp_framework 能力索引
+  2. 按 name、tags、capability 过滤
+  3. 获取匹配的工具元数据（参数 schema、描述）
 
-**工具进化 → Soul 进化**：
-- 大量新工具注册后，角色的 Soul 能力边界描述可能需要更新
-- suri 主动检查和更新受影响角色的 Soul
+mcp_framework 提供以下查询接口：
+  list_tools():                  # 列出所有可用工具
+  find_tool(name):               # 按名称查找
+  search_tools(keywords):        # 按关键词搜索
+  get_tool_schema(tool_name):    # 获取工具参数 schema
+```
+
+## 七、工具与 code_tool 的边界
+
+| 维度 | code_tool | mcp_framework 工具 |
+|------|-----------|-------------------|
+| 用途 | 文件系统操作 | 通用能力调用 |
+| 调用方式 | 插件内部方法 | 事件驱动 tool.call |
+| 注册方式 | 插件内固定 | 动态注册/发现 |
+| 版本管理 | 随插件版本 | 独立版本 |
+| 外部依赖 | 无 | 可依赖外部 MCP 服务 |
+
+> code_tool 是 mcp_framework 的特殊实现：它是文件系统操作的内建工具，注册到 mcp_framework 的工具注册表中，因此角色可通过统一的 tool.call 事件调用 code_tool。

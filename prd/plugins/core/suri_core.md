@@ -89,7 +89,7 @@ if __name__ == "__main__":
 - `plugin.upgrade_proposed` → 接收插件升级方案（包括 suri_core 自身）
 
 ### 发布事件
-- `system.start` / `system.shutdown`
+- `system.started` / `system.shutdown`
 - `system.plugin_loaded` / `system.plugin_unloaded`
 - `system.heartbeat` — 汇总所有插件心跳，更新 plugins 表 last_heartbeat
 - `error.plugin` / `error.system`
@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
 ### 发布事件
 
-#### `system.start`
+#### `system.started`
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `timestamp` | string | 是 | 启动时间 |
