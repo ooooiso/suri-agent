@@ -57,12 +57,12 @@ suri-agent/
 │   ├── event_bus/
 │   ├── plugin_manager/
 │   └── suri_core_plugin.py
-├── plugins/               # 插件目录
+├── agent_framework/plugins/   # 插件目录
 │   ├── suri_core/
 │   ├── config_service/
 │   ├── log_service/
 │   ├── ...（20 个插件）
-├── shared/                # 公共层
+├── agent_framework/shared/        # 公共层
 │   ├── interfaces/
 │   └── utils/
 ├── roles/                 # 角色运行时数据
@@ -91,7 +91,7 @@ mkdir -p ~/.suri/data ~/.suri/runtime ~/.suri/backup
       "persist": true
     },
     "plugin_manager": {
-      "scan_dirs": ["plugins/"],
+      "scan_dirs": ["agent_framework/plugins/"],
       "heartbeat_interval": 5,
       "heartbeat_timeout": 30
     }

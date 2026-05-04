@@ -16,8 +16,8 @@
 WATCH_PATTERNS = [
     "**/*.py",           # Python 代码
     "prd/**/*.md",       # PRD 文档
-    "plugins/**/*.md",   # 插件 PRD
-    "plugins/**/*.py",   # 插件代码
+    "agent_framework/plugins/**/*.md",   # 插件 PRD
+    "agent_framework/plugins/**/*.py",   # 插件代码
     "core/**/*.py",      # 核心代码
     "shared/**/*.py",    # 共享模块
 ]
@@ -29,7 +29,7 @@ WATCH_PATTERNS = [
 
 ```python
 DOC_MAPPING = {
-    "plugins/{name}/{name}.py": "prd/plugins/{name}.md",
+    "agent_framework/plugins/{name}/{name}.py": "prd/plugins/{name}.md",
     "core/event_bus.py": "prd/framework.md",
     "core/plugin_manager.py": "prd/framework.md",
     "core/scheduler.py": "prd/plugins/task_scheduler.md",
@@ -166,8 +166,8 @@ doc_sync:
   watch_patterns:
     - "**/*.py"
     - "prd/**/*.md"
-    - "plugins/**/*.md"
-    - "plugins/**/*.py"
+    - "agent_framework/plugins/**/*.md"
+    - "agent_framework/plugins/**/*.py"
   enable_auto_suggest: true
   min_change_lines: 5             # 最小触发行数
   cooldown_seconds: 300           # 同一文件冷却期

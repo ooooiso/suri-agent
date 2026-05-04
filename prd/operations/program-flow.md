@@ -23,7 +23,7 @@ bootstrap()：
   ├─ 创建 EventBus
   ├─ 创建 PluginManager
   ├─ 自注册 suri_core
-  └─ 扫描 plugins/ 和 ~/.suri/runtime/plugins/
+  └─ 扫描 agent_framework/plugins/ 和 ~/.suri/runtime/agent_framework/plugins/
     │
     ▼
 按依赖拓扑顺序加载插件：

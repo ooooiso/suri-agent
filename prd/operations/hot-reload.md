@@ -159,7 +159,7 @@ role_manager 更新工具调用说明
 ### 4.3 接口版本化
 
 ```python
-# shared/interfaces/plugin.py
+# agent_framework/shared/interfaces/plugin.py
 
 class PluginInterface:
     """插件基类"""

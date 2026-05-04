@@ -20,7 +20,7 @@
 
 **例外**：
 - 测试场景：测试代码可以直接调用插件方法
-- 共享接口：`shared/interfaces/` 中的接口定义可以被所有插件 import
+- 共享接口：`agent_framework/shared/interfaces/` 中的接口定义可以被所有插件 import
 
 ### 原则 2：数据与逻辑分离
 
@@ -139,7 +139,7 @@ async def _dispatch(self, event):
 
 **规则**：
 - 角色数据存储在 `roles/{role_id}/` 目录下（Git 管理）
-- 插件逻辑在 `plugins/{plugin_name}/` 目录下
+- 插件逻辑在 `agent_framework/plugins/{plugin_name}/` 目录下
 - 插件通过 role_manager 获取角色数据，不直接读取角色文件
 
 ### 3.2 角色切换不影响插件
@@ -179,7 +179,7 @@ async def _dispatch(self, event):
 | 关键词 | `~/.suri/data/configs/` | 中断关键词 | ✅ |
 | 角色数据 | `roles/{role_id}/` | Soul 文件、技能、记忆 | ✅ |
 | 插件数据 | `~/.suri/data/plugins/` | 各插件专属数据 | ✅ |
-| 代码逻辑 | `plugins/{name}/plugin.py` | 事件处理、业务逻辑 | ❌（需升级流程）|
+| 代码逻辑 | `agent_framework/plugins/{name}/plugin.py` | 事件处理、业务逻辑 | ❌（需升级流程）|
 
 ### 4.2 数据加载模式
 
@@ -282,7 +282,7 @@ roles/（Git 管理，包含全部角色数据，可迁移可回溯）
   └── output/         ← 角色产出文件
 
 代码仓库（仅存放代码逻辑）
-  ├── plugins/        ← 插件代码
+  ├── agent_framework/plugins/        ← 插件代码
   ├── agent_framework/ ← 框架代码
   └── main.py         ← 入口
 

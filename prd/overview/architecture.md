@@ -178,47 +178,47 @@ suri 接收需求
 
 | 插件 | 位置 | 职责 |
 |------|------|------|
-| **config_service** | `plugins/config_service/` | 配置管理，持久化，热加载 |
-| **log_service** | `plugins/log_service/` | 日志记录，归档，查询 |
-| **security_service** | `plugins/security_service/` | 权限校验，操作审计，代码扫描 |
+| **config_service** | `agent_framework/plugins/config_service/` | 配置管理，持久化，热加载 |
+| **log_service** | `agent_framework/plugins/log_service/` | 日志记录，归档，查询 |
+| **security_service** | `agent_framework/plugins/security_service/` | 权限校验，操作审计，代码扫描 |
 
 ### 4.3 执行层 (6个)
 
 | 插件 | 位置 | 职责 |
 |------|------|------|
-| **task_scheduler** | `plugins/task_scheduler/` | 任务调度，步骤分发，并发控制，超时重试 |
-| **task_planner** | `plugins/task_planner/` | 任务分解，模板匹配，LLM 辅助规划 |
-| **agent_registry** | `plugins/agent_registry/` | Agent 生命周期管理，状态跟踪，进度查询 |
-| **interrupt_handler** | `plugins/interrupt_handler/` | 中断分类，自动重试，用户决策 |
-| **role_comm** | `plugins/role_comm/` | 角色间点对点/广播消息，持久化队列 |
-| **code_tool** | `plugins/code_tool/` | 文件读写，搜索，统计，规则提供 |
+| **task_scheduler** | `agent_framework/plugins/task_scheduler/` | 任务调度，步骤分发，并发控制，超时重试 |
+| **task_planner** | `agent_framework/plugins/task_planner/` | 任务分解，模板匹配，LLM 辅助规划 |
+| **agent_registry** | `agent_framework/plugins/agent_registry/` | Agent 生命周期管理，状态跟踪，进度查询 |
+| **interrupt_handler** | `agent_framework/plugins/interrupt_handler/` | 中断分类，自动重试，用户决策 |
+| **role_comm** | `agent_framework/plugins/role_comm/` | 角色间点对点/广播消息，持久化队列 |
+| **code_tool** | `agent_framework/plugins/code_tool/` | 文件读写，搜索，统计，规则提供 |
 
 ### 4.4 能力层 (6个)
 
 | 插件 | 位置 | 职责 |
 |------|------|------|
-| **llm_gateway** | `plugins/llm_gateway/` | LLM 厂商路由，模型切换，流式响应 |
-| **role_manager** | `plugins/role_manager/` | 角色 CRUD，Soul 解析，能力索引，会话上下文 |
-| **memory_service** | `plugins/memory_service/` | 角色级 SQLite 记忆存储，经验管理 |
-| **role_learner** | `plugins/role_learner/` | 角色自学习，经验提取，技能检测 |
-| **mcp_framework** | `plugins/mcp_framework/` | MCP 协议，工具注册发现，内置服务 |
-| **upgrade_manager** | `plugins/upgrade_manager/` | 升级报告状态机，备份回滚，闭环验证 |
+| **llm_gateway** | `agent_framework/plugins/llm_gateway/` | LLM 厂商路由，模型切换，流式响应 |
+| **role_manager** | `agent_framework/plugins/role_manager/` | 角色 CRUD，Soul 解析，能力索引，会话上下文 |
+| **memory_service** | `agent_framework/plugins/memory_service/` | 角色级 SQLite 记忆存储，经验管理 |
+| **role_learner** | `agent_framework/plugins/role_learner/` | 角色自学习，经验提取，技能检测 |
+| **mcp_framework** | `agent_framework/plugins/mcp_framework/` | MCP 协议，工具注册发现，内置服务 |
+| **upgrade_manager** | `agent_framework/plugins/upgrade_manager/` | 升级报告状态机，备份回滚，闭环验证 |
 
 ### 4.5 接入层 (1个)
 
 | 插件 | 位置 | 职责 |
 |------|------|------|
-| **access** | `plugins/access/` | 多通道接入（CLI/Telegram），消息路由，命令解析 |
+| **access** | `agent_framework/plugins/access/` | 多通道接入（CLI/Telegram），消息路由，命令解析 |
 
 ### 4.6 扩展层 (5个)
 
 | 插件 | 位置 | 职责 |
 |------|------|------|
-| **test_framework** | `plugins/test_framework/` | 测试基础设施 |
-| **cron_service** | `plugins/cron_service/` | 定时任务调度（可选依赖） |
-| **hooks_service** | `plugins/hooks_service/` | 文件变更钩子，事件拦截 |
-| **doc_sync** | `plugins/doc_sync/` | 文档同步，代码变更监控 |
-| **monitor** | `plugins/monitor/` | 系统监控 |
+| **test_framework** | `agent_framework/plugins/test_framework/` | 测试基础设施 |
+| **cron_service** | `agent_framework/plugins/cron_service/` | 定时任务调度（可选依赖） |
+| **hooks_service** | `agent_framework/plugins/hooks_service/` | 文件变更钩子，事件拦截 |
+| **doc_sync** | `agent_framework/plugins/doc_sync/` | 文档同步，代码变更监控 |
+| **monitor** | `agent_framework/plugins/monitor/` | 系统监控 |
 
 ---
 

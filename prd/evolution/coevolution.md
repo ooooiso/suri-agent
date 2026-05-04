@@ -12,7 +12,7 @@
 |------|------|---------|---------|---------|
 | **Skill** | 角色的技能 | role_learner 检测 → 用户确认 → 热激活 | `roles/{role_id}/skills/{name}.json` | 角色能做更多事 |
 | **Soul** | 角色的身份定义 | suri 修改 → 用户确认 → 热生效 | `roles/{role_id}/soul.md` | 角色职责/能力边界变化 |
-| **Plugin** | 系统插件能力 | suri 开发/升级 → 用户确认 → 热注册 | `plugins/{plugin_name}/` | 系统有新的能力提供者 |
+| **Plugin** | 系统插件能力 | suri 开发/升级 → 用户确认 → 热注册 | `agent_framework/plugins/{plugin_name}/` | 系统有新的能力提供者 |
 | **Tool** | MCP 工具库 | suri 为角色开发 → 用户确认 → 热注册 | mcp_framework Registry | 角色有新的工具可用 |
 
 ---
@@ -372,7 +372,7 @@ worker data_analyst 执行任务时受阻
 |------|---------|---------|---------|
 | Skill | `skill_{name}_v{major}.{minor}.json` | `roles/{id}/skills/` | upgrade_manager 版本恢复 |
 | Soul | `soul.md` 中 `version` 字段 | `roles/{id}/soul.md` | git revert + soul_updated |
-| Plugin | plugin 本身的版本控制 | `plugins/{name}/` | plugin_manager 版本切换 |
+| Plugin | plugin 本身的版本控制 | `agent_framework/plugins/{name}/` | plugin_manager 版本切换 |
 | Tool | Registry 中的注册记录 | mcp_framework | 注销 + 重新注册旧版本 |
 
 ---

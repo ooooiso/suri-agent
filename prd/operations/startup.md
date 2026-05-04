@@ -44,7 +44,7 @@ SuriCorePlugin.bootstrap()
   │   └── 初始化 asyncio.Queue，准备内部订阅分发
   │
   Step 2: 创建 PluginManager
-  │   └── 初始化插件目录（plugins/ + ~/.suri/runtime/plugins/）
+  │   └── 初始化插件目录（agent_framework/plugins/ + ~/.suri/runtime/agent_framework/plugins/）
   │
   Step 3: 自注册 suri_core 为第一个插件
   │   └── 通过 PluginManager.register_plugin() 注册自身

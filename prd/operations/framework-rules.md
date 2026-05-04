@@ -186,7 +186,7 @@ roles/（Git 管理，包含全部角色数据，git clone 即可恢复）
   └── runtime/
       ├── logs/               # 运行时日志
       ├── sessions/           # 会话缓存
-      └── plugins/            # 动态插件运行时数据
+      └── agent_framework/plugins/   # 动态插件运行时数据
 ```
 
 ### SQLite 表结构
@@ -229,7 +229,7 @@ bootstrap()：
 扫描 → 加载 → 初始化 → 注册 → 运行 → 暂停 → 卸载 → 清理
 ```
 
-- **扫描**：plugin_manager 读取 plugins/ 和 `~/.suri/runtime/plugins/`
+- **扫描**：plugin_manager 读取 agent_framework/plugins/ 和 `~/.suri/runtime/agent_framework/plugins/`
 - **加载**：import 插件模块
 - **初始化**：调用插件 init()，传入 event_bus 和配置
 - **注册**：插件声明订阅的事件类型（含 manifest.json 暴露声明）

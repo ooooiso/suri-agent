@@ -46,7 +46,7 @@
 - 写入或覆盖指定路径的文件
 - 写入前检查路径是否在写白名单
 - 禁止写入 agent_framework/、shared/interfaces/、~/.suri/
-- plugins/、tests/、roles/ 目录写入需标记 needs_approval
+- agent_framework/plugins/、tests/、roles/ 目录写入需标记 needs_approval
 
 ### 6. 文件追加（append_file）【迭代 1 已实现】
 
@@ -170,9 +170,9 @@ class CodeTool:
 ALLOWED_READ_PATHS = [
     "suri-agent/",           # 项目根目录
     "roles/",                # 角色目录
-    "plugins/",              # 插件目录
+    "agent_framework/plugins/",              # 插件目录
     "prd/",                  # PRD 文档
-    "shared/",               # 共享模块
+    "agent_framework/shared/",               # 共享模块
     "tests/",                # 测试代码
     "agent_framework/",      # 核心框架（只读）
 ]
@@ -193,8 +193,8 @@ ALLOWED_READ_PATHS = [
 
 ```python
 ALLOWED_WRITE_PATHS = [
-    "plugins/{new_plugin}/",   # 新插件目录（首次需审批）
-    "plugins/{existing_plugin}/", # 现有插件目录（需审批）
+    "agent_framework/plugins/{new_plugin}/",   # 新插件目录（首次需审批）
+    "agent_framework/plugins/{existing_plugin}/", # 现有插件目录（需审批）
     "tests/",                  # 测试代码（需审批）
     "roles/",                  # 角色目录（需审批）
     "prd/",                    # PRD 文档（需审批）
@@ -202,7 +202,7 @@ ALLOWED_WRITE_PATHS = [
 
 FORBIDDEN_WRITE_PATHS = [
     "agent_framework/",        # 核心框架禁止写入
-    "shared/interfaces/",      # 接口定义禁止写入
+    "agent_framework/shared/interfaces/",      # 接口定义禁止写入
     "~/.suri/",                # 运行时数据禁止写入
     "main.py",                 # 入口文件禁止写入
 ]

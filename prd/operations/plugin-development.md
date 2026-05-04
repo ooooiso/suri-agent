@@ -7,7 +7,7 @@
 ## 1. 插件目录结构
 
 ```
-plugins/{plugin_name}/
+agent_framework/plugins/{plugin_name}/
 ├── __init__.py            # 插件入口，导出 Plugin 类
 ├── plugin.py              # 主实现类，继承 PluginInterface
 ├── manifest.json          # 插件元数据声明
@@ -33,7 +33,7 @@ plugins/{plugin_name}/
   "permissions": ["system.*", "user.input"],
   "event_subscriptions": ["task.completed", "user.command"],
   "fs_permissions": {
-    "read": ["plugins/my_plugin/", "~/.suri/runtime/my_plugin/"],
+    "read": ["agent_framework/plugins/my_plugin/", "~/.suri/runtime/my_plugin/"],
     "write": ["~/.suri/runtime/my_plugin/"]
   },
   "runtime_mutable": true,
@@ -70,9 +70,9 @@ plugins/{plugin_name}/
 ## 3. PluginInterface 实现
 
 ```python
-# plugins/my_plugin/plugin.py
-from shared.interfaces import PluginInterface
-from shared.utils.event_types import Event, EventType
+# agent_framework/plugins/my_plugin/plugin.py
+from agent_framework.shared.interfaces import PluginInterface
+from agent_framework.shared.utils.event_types import Event, EventType
 
 class MyPlugin(PluginInterface):
     """插件主类"""
@@ -148,12 +148,12 @@ class MyPlugin(PluginInterface):
 
 ```python
 # ✅ 正确：绝对导入
-from plugins.llm_gateway.plugin import LLMGatewayPlugin
-from shared.utils.event_types import Event, Priority
+from agent_framework.plugins.llm_gateway.plugin import LLMGatewayPlugin
+from agent_framework.shared.utils.event_types import Event, Priority
 
 # ❌ 错误：相对导入
 from .plugin import LLMGatewayPlugin
-from ..shared.utils.event_types import Event
+from agent_framework.shared.utils.event_types import Event
 ```
 
 ## 4. 事件订阅与发布
@@ -172,7 +172,7 @@ self.event_bus.subscribe("error.*", self.handle_errors)
 ### 发布事件
 
 ```python
-from shared.utils.event_types import Event, Priority
+from agent_framework.shared.utils.event_types import Event, Priority
 
 event = Event(
     event_type="my_plugin.status",
@@ -260,7 +260,7 @@ config = {
 ## 6. 数据库使用
 
 ```python
-from shared.utils.db import get_plugin_db
+from agent_framework.shared.utils.db import get_plugin_db
 
 # 获取插件专属 SQLite 连接
 async with get_plugin_db("my_plugin") as db:
@@ -275,7 +275,7 @@ async with get_plugin_db("my_plugin") as db:
 ```
 
 **规则**：
-- 插件只能读写自己的数据库文件（`~/.suri/data/plugins/{plugin_name}.db`）
+- 插件只能读写自己的数据库文件（`~/.suri/data/agent_framework/plugins/{plugin_name}.db`）
 - 禁止直接访问其他插件的数据库
 - 使用 WAL 模式支持并发读写
 
@@ -431,15 +431,15 @@ class PluginTestHarness:
 每个插件必须包含测试文件：
 
 ```python
-# plugins/my_plugin/tests/test_plugin.py
+# agent_framework/plugins/my_plugin/tests/test_plugin.py
 import unittest
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from plugins.my_plugin.plugin import MyPlugin
-from shared.utils.event_types import Event, Priority
+from agent_framework.plugins.my_plugin.plugin import MyPlugin
+from agent_framework.shared.utils.event_types import Event, Priority
 
 class TestMyPlugin(unittest.TestCase):
     def setUp(self):
@@ -465,7 +465,7 @@ class TestMyPlugin(unittest.TestCase):
 
 ## 9. PRD 编写规范
 
-开发新插件前必须编写 PRD 文档，保存到 `prd/plugins/{plugin_name}.md`：
+开发新插件前必须编写 PRD 文档，保存到 `prd/agent_framework/plugins/{plugin_name}.md`：
 
 ```markdown
 # {plugin_name} 插件 PRD
@@ -566,7 +566,7 @@ SURI_LOG_LEVEL=DEBUG python main.py
 python main.py --watch-plugins
 
 # 重载行为：
-# 1. 检测 plugins/my_plugin/ 文件变更
+# 1. 检测 agent_framework/plugins/my_plugin/ 文件变更
 # 2. 调用 plugin.stop() → plugin.cleanup()
 # 3. 重新 import 模块
 # 4. 调用 plugin.init() → plugin.start()
@@ -580,7 +580,7 @@ python main.py --watch-plugins
 python scripts/create_plugin.py --name my_plugin --type capability
 
 # 生成文件结构：
-# plugins/my_plugin/
+# agent_framework/plugins/my_plugin/
 # ├── manifest.json
 # ├── plugin.py
 # ├── config.yaml
@@ -599,7 +599,7 @@ python scripts/create_plugin.py --name my_plugin --type capability
 - [ ] 数据库操作使用插件专属连接
 - [ ] 日志使用 get_plugin_logger
 - [ ] 测试用例覆盖核心功能和异常场景
-- [ ] PRD 文档已编写并同步更新 plugins/README.md
+- [ ] PRD 文档已编写并同步更新 agent_framework/plugins/README.md
 - [ ] 通过 AST 安全扫描（无危险操作）
 - [ ] 依赖关系已声明，无循环依赖
 
@@ -617,8 +617,8 @@ python scripts/create_plugin.py --name my_plugin --type capability
 | 模板 | `~/.suri/data/templates/` | Soul 模板、任务模板 | ✅ |
 | 关键词 | `~/.suri/data/configs/` | 中断关键词 | ✅ |
 | 角色数据 | `~/.suri/runtime/roles/` | Soul 文件、技能 | ✅ |
-| 插件数据 | `~/.suri/data/plugins/` | 各插件专属数据 | ✅ |
-| 代码逻辑 | `plugins/{name}/plugin.py` | 事件处理、业务逻辑 | ❌（需升级流程）|
+| 插件数据 | `~/.suri/data/agent_framework/plugins/` | 各插件专属数据 | ✅ |
+| 代码逻辑 | `agent_framework/plugins/{name}/plugin.py` | 事件处理、业务逻辑 | ❌（需升级流程）|
 
 ### 12.2 热更新事件订阅
 

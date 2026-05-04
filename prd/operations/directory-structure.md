@@ -36,7 +36,7 @@ suri-agent/                        # 项目根目录（Git 管理全部）
         - manifest.json            # 内核插件清单
     - migrations/                  # 数据库迁移脚本（按版本号排序）
       - 001_initial.sql            # 初始 schema
-  - plugins/                       # 插件层（20 个插件）
+  - agent_framework/plugins/                       # 插件层（20 个插件）
     - access/                      # 统一接入层（CLI / Web / Telegram / Lark / API）
       - __init__.py
       - manifest.json
@@ -103,7 +103,7 @@ suri-agent/                        # 项目根目录（Git 管理全部）
       - writer.py                  # write_file / append_file / create_file ✅（迭代 1 已实现）
       - test_runner.py             # [迭代 2 解锁]
       - executor.py                # [迭代 2 解锁]
-  - shared/                        # 公共层（禁止包含业务逻辑）
+  - agent_framework/shared/          # 公共层（禁止包含业务逻辑）
     - __init__.py
     - interfaces/                  # 插件接口定义
       - __init__.py
@@ -128,7 +128,7 @@ suri-agent/                        # 项目根目录（Git 管理全部）
     - event_registry.md            # 事件注册表
     - security_spec.md             # 安全规范
     - file_directory.md            # 本文档
-    - plugins/                     # 20 个插件的详细 PRD
+    - agent_framework/plugins/                     # 20 个插件的详细 PRD
   - roles/                         # ⭐ 所有角色数据（Git 管理，换设备 git clone 全回来）
     - suri/                        # 核心角色
       - soul.md                    # 角色人格定义（YAML frontmatter + Markdown）
@@ -202,7 +202,7 @@ suri-agent/                        # 项目根目录（Git 管理全部）
     - logs/                        # 系统日志
       - {plugin_name}/             # 按插件分目录
     - sessions/                    # 会话历史
-    - plugins/                     # 动态插件运行时数据
+    - agent_framework/plugins/                     # 动态插件运行时数据
       - {plugin_id}/
     - backup/                      # 自动备份
 ```
@@ -235,7 +235,7 @@ cp -r ~/.suri/ 新电脑的 ~/.suri/
 | `~/.suri/runtime/suri.db` | 首次运行 | suri_core（含迁移） |
 | `~/.suri/runtime/logs/` | 首次运行 | log_service |
 | `~/.suri/runtime/sessions/` | 首次会话时 | access |
-| `~/.suri/runtime/plugins/{plugin_id}/` | 加载动态插件时 | plugin_manager |
+| `~/.suri/runtime/agent_framework/plugins/{plugin_id}/` | 加载动态插件时 | plugin_manager |
 | `~/.suri/runtime/backup/` | 首次备份时 | 运维脚本 |
 | `roles/suri/memories/` | 首次运行 | role_manager |
 | `roles/suri/skills/` | 角色学习进化时 | role_learner |
@@ -252,5 +252,5 @@ cp -r ~/.suri/ 新电脑的 ~/.suri/
 1. **角色数据在 Git 中**：所有角色的记忆、技能、学习成果保存在 `roles/` 下，`git commit` 版本控制，换设备 `git clone` 全回来
 2. **系统配置在 `~/.suri/`**：API Key 等敏感信息不纳入 Git，防止误提交
 3. **角色隔离**：每个角色的数据在独立目录中，禁止跨角色直接访问
-4. **插件自治**：每个插件的运行时数据在 `~/.suri/runtime/plugins/{plugin_id}/` 中，由插件自行管理
+4. **插件自治**：每个插件的运行时数据在 `~/.suri/runtime/agent_framework/plugins/{plugin_id}/` 中，由插件自行管理
 5. **预留最小化**：`[预留]` 目录按需创建，不预先生成空目录

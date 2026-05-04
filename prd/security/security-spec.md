@@ -80,7 +80,7 @@ SANDBOX_RULES = {
         "write": ["~/.suri/runtime/", "~/.suri/data/"]
     },
     "default_plugin": {
-        "read": ["plugins/{plugin_name}/", "~/.suri/runtime/{plugin_name}/"],
+        "read": ["agent_framework/plugins/{plugin_name}/", "~/.suri/runtime/{plugin_name}/"],
         "write": ["~/.suri/runtime/{plugin_name}/"]
     }
 }

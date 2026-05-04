@@ -19,7 +19,7 @@
 
 ### 3. 角色与插件配置扫描
 - 扫描 `role/` 目录下所有 Soul 文件（YAML frontmatter + Markdown）
-- 扫描 `~/.suri/runtime/plugins/` 下动态插件的 manifest
+- 扫描 `~/.suri/runtime/agent_framework/plugins/` 下动态插件的 manifest
 - 提供角色查询 API：list_roles / get_role_soul / resolve_role_id
 - 别名映射系统（如旧名 → canonical id）
 
