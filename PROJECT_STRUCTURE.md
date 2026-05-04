@@ -11,32 +11,32 @@ suri-agent/
 ├── .env.example                     # 环境变量模板
 ├── .gitignore
 ├── README.md
+├── AUDIT-REPORT.md                  # PRD 全量审计报告
+├── DEV-PLAN.md                      # 可执行开发计划
 │
-├── agent_framework/                 # ★ 框架核心（系统层代码）
+├── agent_framework/                 # ★ 框架核心 + 所有运行时实现
 │   ├── core/suri_core/              #   内核：自举注册，协调 EventBus + PluginManager
 │   ├── event_bus/                   #   异步事件总线（发布/订阅）
 │   ├── plugin_manager/              #   插件管理器（扫描/加载/生命周期）
 │   ├── migrations/                  #   SQLite 数据库迁移脚本
-│   ├── access/                      #   接入层（预留）
-│   ├── capability/                  #   能力层（预留子目录结构）
-│   ├── execution/                   #   执行层（预留子目录结构）
-│   ├── extension/                   #   扩展层（预留子目录结构）
-│   ├── service/                     #   基础服务层（预留子目录结构）
-│   └── suri_core_plugin/            #   旧版内核插件（过渡用）
+│   ├── shared/                      #   共享代码（原 plugins/ + shared/ 合并至此）
+│   │   ├── interfaces/plugin.py     #     插件基类接口
+│   │   └── utils/event_types.py     #     事件类型常量
+│   └── plugins/                     # ★ 所有插件实现
+│       ├── access/                  #   接入层：CLI、Telegram、配置编辑器
+│       ├── agent_registry/          #   执行层：Agent 生命周期管理
+│       ├── code_tool/               #   执行层：文件读写、搜索、统计
+│       ├── config_service/          #   服务层：配置管理
+│       ├── interrupt_handler/       #   执行层：中断分类、自动重试
+│       ├── llm_gateway/             #   能力层：LLM 路由、模型切换
+│       ├── log_service/             #   服务层：日志记录
+│       ├── role_manager/            #   能力层：角色 CRUD、Soul 解析
+│       ├── security_service/        #   服务层：权限校验、审计
+│       ├── task_planner/            #   执行层：任务分解
+│       ├── task_scheduler/          #   执行层：任务调度
+│       └── test_framework/          #   扩展层：测试基础设施
 │
-├── plugins/                         # ★ 插件实现（运行时代码）
-│   ├── access/                      #   接入层：CLI、Telegram、配置编辑器
-│   ├── agent_registry/              #   执行层：Agent 生命周期管理
-│   ├── code_tool/                   #   执行层：文件读写、搜索、统计
-│   ├── config_service/              #   服务层：配置管理
-│   ├── interrupt_handler/           #   执行层：中断分类、自动重试
-│   ├── llm_gateway/                 #   能力层：LLM 路由、模型切换
-│   ├── log_service/                 #   服务层：日志记录
-│   ├── role_manager/                #   能力层：角色 CRUD、Soul 解析
-│   ├── security_service/            #   服务层：权限校验、审计
-│   ├── task_planner/                #   执行层：任务分解
-│   ├── task_scheduler/              #   执行层：任务调度
-│   └── test_framework/              #   扩展层：测试基础设施
+├── plugins/                         # （已迁移至 agent_framework/plugins/，此目录不再使用）
 │
 ├── prd/                             # ★ 产品需求文档（完整设计说明）
 │   ├── README.md                    #   PRD 入口和阅读路径
@@ -90,17 +90,11 @@ suri-agent/
 │       ├── extension/               #     扩展（测试/定时/钩子/同步）
 │       └── access/                  #     接入层（CLI/Web/Telegram/桌面）
 │
-├── roles/                           # ★ 角色模板（代码仓库）
+├── roles/                           # ★ 角色模板（代码仓库，Git 管理）
 │   ├── README.md                    #   角色说明
 │   └── suri/                        #   suri 主人角色
 │       ├── meta.json                #     元数据
 │       └── soul.md                  #     Soul 定义
-│
-├── shared/                          # ★ 共享代码
-│   ├── interfaces/                  #   接口定义
-│   │   └── plugin.py                #     插件基类接口
-│   └── utils/                       #   工具函数
-│       └── event_types.py           #     事件类型常量
 │
 ├── tests/                           # ★ 测试
 │   ├── framework/base.py            #   测试基类
@@ -108,7 +102,7 @@ suri-agent/
 │   ├── unit/                        #   模块单元测试（3 个测试文件）
 │   └── integration/                 #   集成测试（预留）
 │
-└── works/                           # 工作区模板（首次运行复制到 ~/.suri/runtime/）
+└── works/                           # 工作区模板
     └── README.md
 ```
 
@@ -131,13 +125,21 @@ suri-agent/
 ## 目录设计原则
 
 ```
-agent_framework/   ← 框架核心（系统级代码，可独立升级）
-plugins/           ← 插件实现（运行时代码，热加载）
+agent_framework/   ← 框架核心（系统级 + 插件实现，全部代码）
 prd/               ← 产品需求文档（设计说明）
-roles/             ← 角色模板（首次运行复制到 ~/.suri/runtime/roles/）
-shared/            ← 共享代码（接口定义、工具函数）
+roles/             ← 角色模板（Git 管理，换设备 git clone 全回来）
 tests/             ← 测试
-works/             ← 工作区模板（首次运行复制到 ~/.suri/runtime/works/）
+works/             ← 工作区模板
 ```
 
-**关键解耦**：项目数据（`~/.suri/runtime/works/`）和角色数据（`~/.suri/runtime/roles/`）在运行时目录，与代码仓库分离，支持平滑迁移。
+## Import 路径规范
+
+所有代码统一使用以下 import 格式：
+
+```python
+# 插件导入
+from agent_framework.plugins.{name}.plugin import {Name}Plugin
+
+# 共享模块
+from agent_framework.shared.interfaces.plugin import PluginInterface
+from agent_framework.shared.utils.event_types import Event, Priority

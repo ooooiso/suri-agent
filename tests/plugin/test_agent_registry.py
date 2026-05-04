@@ -5,9 +5,9 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import unittest
-from plugins.agent_registry.plugin import AgentRegistryPlugin
-from plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
-from shared.interfaces.plugin import TaskStep
+from agent_framework.plugins.agent_registry.plugin import AgentRegistryPlugin
+from agent_framework.plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
+from agent_framework.shared.interfaces.plugin import TaskStep
 
 
 class TestAgentRegistryPlugin(TestBase):

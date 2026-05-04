@@ -11,8 +11,8 @@ from typing import Any, Dict
 
 from agent_framework.event_bus.bus import EventBus
 from agent_framework.plugin_manager.manager import PluginManager
-from shared.interfaces.plugin import PluginInterface
-from shared.utils.event_types import Event, Priority
+from agent_framework.shared.interfaces.plugin import PluginInterface
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class SuriCorePlugin(PluginInterface):
@@ -29,6 +29,8 @@ class SuriCorePlugin(PluginInterface):
         self._plugin_manager: PluginManager = None
         self._running = False
         self._shutdown_event = None
+        # 项目根目录 = suri-agent/
+        self._project_root = Path(__file__).parent.parent.parent.parent
 
     async def bootstrap(self) -> None:
         """启动流程。
@@ -52,10 +54,9 @@ class SuriCorePlugin(PluginInterface):
         self._event_bus = EventBus(db_path=db_path)
         await self._event_bus.start()
         
-        # 2. 创建 PluginManager
-        project_root = Path(__file__).parent.parent.parent
+        # 2. 创建 PluginManager（扫描 agent_framework/plugins/ 目录）
         scan_dirs = [
-            str(project_root / "plugins"),
+            str(self._project_root / "agent_framework/plugins"),
             str(runtime_dir / "plugins"),
         ]
         self._plugin_manager = PluginManager(self._event_bus, scan_dirs)

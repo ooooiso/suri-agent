@@ -9,9 +9,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import unittest
 
 from agent_framework.event_bus.bus import EventBus
-from plugins.access.plugin import AccessPlugin
-from plugins.access.formatter import MessageFormatter
-from shared.utils.event_types import Event, Priority
+from agent_framework.plugins.access.plugin import AccessPlugin
+from agent_framework.plugins.access.formatter import MessageFormatter
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class TestAccessEvents(unittest.TestCase):

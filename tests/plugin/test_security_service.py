@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import unittest
 
-from plugins.security_service.plugin import SecurityServicePlugin
+from agent_framework.plugins.security_service.plugin import SecurityServicePlugin
 
 
 class TestSecurityService(unittest.TestCase):
@@ -18,8 +18,8 @@ class TestSecurityService(unittest.TestCase):
         self.plugin._project_root = Path(__file__).parent.parent.parent
 
     def test_can_read_allowed(self):
-        self.assertTrue(self.plugin.can_read("shared/utils/event_types.py"))
-        self.assertTrue(self.plugin.can_read("plugins/"))
+        self.assertTrue(self.plugin.can_read("agent_framework/shared/utils/event_types.py"))
+        self.assertTrue(self.plugin.can_read("agent_framework/plugins/"))
         self.assertTrue(self.plugin.can_read("roles/"))
 
     def test_can_read_forbidden(self):
@@ -27,7 +27,7 @@ class TestSecurityService(unittest.TestCase):
         self.assertFalse(self.plugin.can_read("C:/Windows/system32"))
 
     def test_can_write_allowed(self):
-        self.assertTrue(self.plugin.can_write("plugins/test.py"))
+        self.assertTrue(self.plugin.can_write("agent_framework/plugins/test.py"))
         self.assertTrue(self.plugin.can_write("tests/test.py"))
         self.assertTrue(self.plugin.can_write("roles/suri/Soul.md"))
 

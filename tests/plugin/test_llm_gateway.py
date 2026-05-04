@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from plugins.llm_gateway.plugin import LLMGatewayPlugin
-from shared.utils.event_types import Event, Priority
+from agent_framework.plugins.llm_gateway.plugin import LLMGatewayPlugin
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class TestLLMGatewayPlugin:

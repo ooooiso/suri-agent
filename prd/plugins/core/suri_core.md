@@ -61,7 +61,7 @@ if __name__ == "__main__":
 **关键约束**：EventBus 只做消息路由，不解析消息内容，不决定消息去向。路由目标由订阅者自己匹配。
 
 ### 2. 插件管理器（PluginManager）
-- 扫描路径：`plugins/` + `~/.suri/runtime/plugins/`
+- 扫描路径：`agent_framework/plugins/` + `~/.suri/runtime/plugins/`
 - 生命周期：扫描 → 加载 → 初始化 → 注册 → 运行 → 暂停 → 卸载 → 清理
 - 依赖排序加载（拓扑排序）
   - 构建反向图：`graph[name]` = 依赖 name 的节点集合
@@ -216,7 +216,7 @@ suri_core:
     worker_count: 4
     persist: true
   plugin_manager:
-    scan_dirs: ["plugins/"]
+    scan_dirs: ["agent_framework/plugins/"]
     auto_load_core: true
     heartbeat_interval: 5
     heartbeat_timeout: 30

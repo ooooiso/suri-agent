@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from shared.utils.event_types import Event, Priority
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class EventBus:

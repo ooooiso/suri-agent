@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from plugins.role_manager.plugin import RoleManagerPlugin
-from shared.utils.event_types import Event, Priority
+from agent_framework.plugins.role_manager.plugin import RoleManagerPlugin
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class TestRoleManagerPlugin:

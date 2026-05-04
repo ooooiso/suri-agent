@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import unittest
 
 from agent_framework.event_bus.bus import EventBus
-from plugins.code_tool.plugin import CodeToolPlugin
-from plugins.code_tool.writer import write_file, append_file, create_file
-from shared.utils.event_types import Event, Priority
+from agent_framework.plugins.code_tool.plugin import CodeToolPlugin
+from agent_framework.plugins.code_tool.writer import write_file, append_file, create_file
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class TestCodeToolEvents(unittest.TestCase):
@@ -39,7 +39,7 @@ class TestCodeToolEvents(unittest.TestCase):
                 source="test",
                 payload={
                     "tool_name": "code_tool.read_file",
-                    "params": {"path": "shared/utils/event_types.py"},
+                    "params": {"path": "agent_framework/shared/utils/event_types.py"},
                 },
                 priority=Priority.NORMAL,
             )
@@ -73,7 +73,7 @@ class TestCodeToolEvents(unittest.TestCase):
                 source="test",
                 payload={
                     "tool_name": "code_tool.list_dir",
-                    "params": {"path": "shared"},
+                    "params": {"path": "agent_framework/shared"},
                 },
                 priority=Priority.NORMAL,
             )
@@ -170,13 +170,13 @@ class TestCodeToolWriter(unittest.TestCase):
 
     def test_write_forbidden_dir(self):
         """测试写入禁止目录返回错误。"""
-        result = write_file(self.temp_dir, "agent_framework/test.py", "content")
+        result = write_file(self.temp_dir, "agent_framework/core/plugin.py", "content")
         self.assertIn("error_code", result)
         self.assertEqual(result["error_code"], 4002)
 
     def test_write_needs_approval(self):
         """测试写入需要审批的目录标记。"""
-        result = write_file(self.temp_dir, "plugins/test.py", "content")
+        result = write_file(self.temp_dir, "agent_framework/plugins/test.py", "content")
         self.assertTrue(result.get("needs_approval"))
 
 

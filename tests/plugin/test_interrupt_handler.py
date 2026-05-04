@@ -5,8 +5,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import unittest
-from plugins.interrupt_handler.plugin import InterruptHandlerPlugin
-from plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
+from agent_framework.plugins.interrupt_handler.plugin import InterruptHandlerPlugin
+from agent_framework.plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
 
 
 class TestInterruptHandlerPlugin(TestBase):
@@ -161,7 +161,7 @@ class TestInterruptHandlerPlugin(TestBase):
     
     async def test_on_agent_blocked(self):
         """测试 Agent 受阻事件处理"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         event = Event(
             event_type="agent.blocked",
@@ -182,7 +182,7 @@ class TestInterruptHandlerPlugin(TestBase):
     
     async def test_on_task_failed_auto_retry(self):
         """测试任务失败事件处理（自动重试）"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         self.plugin.config["enable_auto_retry"] = True
         self.plugin.config["auto_retry_types"] = ["timeout"]
@@ -207,7 +207,7 @@ class TestInterruptHandlerPlugin(TestBase):
     
     async def test_on_task_failed_user_decision(self):
         """测试任务失败事件处理（需要用户决策）"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         self.plugin.config["enable_auto_retry"] = True
         self.plugin.config["auto_retry_types"] = ["timeout"]
@@ -232,7 +232,7 @@ class TestInterruptHandlerPlugin(TestBase):
     
     async def test_on_user_decision_continue(self):
         """测试用户决策：继续"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         # 先创建一个待处理决策
         self.plugin._pending_decisions["decision_001"] = {
@@ -260,7 +260,7 @@ class TestInterruptHandlerPlugin(TestBase):
     
     async def test_on_user_decision_cancel(self):
         """测试用户决策：取消"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         self.plugin._pending_decisions["decision_002"] = {
             "agent_id": "agent_001",
@@ -343,7 +343,7 @@ class TestInterruptHandlerPlugin(TestBase):
     
     async def test_on_config_updated_ignores_other_plugin(self):
         """测试 config.updated 事件只响应自身插件"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         # 先修改关键词
         self.plugin._keywords["missing_tool"] = ["被修改"]
@@ -361,7 +361,7 @@ class TestInterruptHandlerPlugin(TestBase):
     
     async def test_on_config_updated_self(self):
         """测试 config.updated 事件响应自身插件"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         # 先修改关键词
         self.plugin._keywords["missing_tool"] = ["被修改"]
@@ -379,7 +379,7 @@ class TestInterruptHandlerPlugin(TestBase):
     
     async def test_on_keywords_updated(self):
         """测试 keywords_updated 事件触发重新加载"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         # 先修改关键词
         self.plugin._keywords["missing_tool"] = ["被修改"]

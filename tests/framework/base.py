@@ -11,7 +11,7 @@ import unittest
 from typing import Any, Dict, Optional
 
 from agent_framework.event_bus.bus import EventBus
-from shared.utils.event_types import Event, Priority
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class AsyncTestCase(unittest.TestCase):

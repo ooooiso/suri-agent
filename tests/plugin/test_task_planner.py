@@ -5,8 +5,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import unittest
-from plugins.task_planner.plugin import TaskPlannerPlugin
-from plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
+from agent_framework.plugins.task_planner.plugin import TaskPlannerPlugin
+from agent_framework.plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
 
 
 class TestTaskPlannerPlugin(TestBase):
@@ -65,7 +65,7 @@ class TestTaskPlannerPlugin(TestBase):
     
     def test_cycle_detection(self):
         """测试循环依赖检测"""
-        from shared.interfaces.plugin import TaskStep
+        from agent_framework.shared.interfaces.plugin import TaskStep
         
         steps = [
             TaskStep(step_id="step_1", description="A", assignee="suri", depends_on=["step_2"]),
@@ -77,7 +77,7 @@ class TestTaskPlannerPlugin(TestBase):
     
     def test_no_cycle(self):
         """测试无循环依赖"""
-        from shared.interfaces.plugin import TaskStep
+        from agent_framework.shared.interfaces.plugin import TaskStep
         
         steps = [
             TaskStep(step_id="step_1", description="A", assignee="suri", depends_on=[]),
@@ -89,7 +89,7 @@ class TestTaskPlannerPlugin(TestBase):
     
     def test_register_template(self):
         """测试注册模板"""
-        from shared.interfaces.plugin import TaskTemplate, TemplateStep
+        from agent_framework.shared.interfaces.plugin import TaskTemplate, TemplateStep
         
         template = TaskTemplate(
             template_id="test.custom",
@@ -106,7 +106,7 @@ class TestTaskPlannerPlugin(TestBase):
     
     def test_register_template_priority_limit(self):
         """测试模板优先级限制（不能超过 99）"""
-        from shared.interfaces.plugin import TaskTemplate, TemplateStep
+        from agent_framework.shared.interfaces.plugin import TaskTemplate, TemplateStep
         
         template = TaskTemplate(
             template_id="test.high",
@@ -127,7 +127,7 @@ class TestTaskPlannerPlugin(TestBase):
     
     def test_get_ready_steps(self):
         """测试获取就绪步骤"""
-        from shared.interfaces.plugin import TaskPlan, TaskStep
+        from agent_framework.shared.interfaces.plugin import TaskPlan, TaskStep
         
         plan = TaskPlan(
             plan_id="test_plan",
@@ -161,7 +161,7 @@ class TestTaskPlannerPlugin(TestBase):
     
     async def test_template_to_plan_depends_on(self):
         """测试模板转换的 depends_on 正确性"""
-        from shared.interfaces.plugin import TaskTemplate, TemplateStep
+        from agent_framework.shared.interfaces.plugin import TaskTemplate, TemplateStep
         
         template = TaskTemplate(
             template_id="test.depends",
@@ -225,7 +225,7 @@ class TestTaskPlannerPlugin(TestBase):
     async def test_reload_templates_keeps_builtin(self):
         """测试重新加载模板时内置模板始终保留"""
         # 先注册一个外部模板
-        from shared.interfaces.plugin import TaskTemplate, TemplateStep
+        from agent_framework.shared.interfaces.plugin import TaskTemplate, TemplateStep
         template = TaskTemplate(
             template_id="test.custom",
             name="自定义",
@@ -250,7 +250,7 @@ class TestTaskPlannerPlugin(TestBase):
         """测试外部模板不能覆盖内置模板"""
         # 模拟外部模板加载（通过 _load_external_templates 返回内置同名的模板）
         # 但 _reload_templates 会跳过内置模板的覆盖
-        from shared.interfaces.plugin import TaskTemplate, TemplateStep
+        from agent_framework.shared.interfaces.plugin import TaskTemplate, TemplateStep
         
         # 直接修改 _templates 模拟外部加载
         original_steps = len(self.plugin._templates["builtin.code"].steps)
@@ -261,7 +261,7 @@ class TestTaskPlannerPlugin(TestBase):
     
     async def test_on_config_updated_ignores_other_plugin(self):
         """测试 config.updated 事件只响应自身插件"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         # 其他插件的配置变更不应触发重新加载
         event = Event(
@@ -274,10 +274,10 @@ class TestTaskPlannerPlugin(TestBase):
     
     async def test_on_config_updated_self(self):
         """测试 config.updated 事件响应自身插件"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         # 先注册一个外部模板
-        from shared.interfaces.plugin import TaskTemplate, TemplateStep
+        from agent_framework.shared.interfaces.plugin import TaskTemplate, TemplateStep
         template = TaskTemplate(
             template_id="test.before_reload",
             name="重载前",
@@ -302,10 +302,10 @@ class TestTaskPlannerPlugin(TestBase):
     
     async def test_on_templates_updated(self):
         """测试 templates_updated 事件触发重新加载"""
-        from shared.utils.event_types import Event
+        from agent_framework.shared.utils.event_types import Event
         
         # 先注册一个外部模板
-        from shared.interfaces.plugin import TaskTemplate, TemplateStep
+        from agent_framework.shared.interfaces.plugin import TaskTemplate, TemplateStep
         template = TaskTemplate(
             template_id="test.before_update",
             name="更新前",

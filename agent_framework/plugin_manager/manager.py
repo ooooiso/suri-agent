@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Type
 
-from shared.interfaces.plugin import PluginInterface
-from shared.utils.event_types import Event, Priority
+from agent_framework.shared.interfaces.plugin import PluginInterface
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class PluginManager:

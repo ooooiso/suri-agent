@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from plugins.access.cli import CLISession
-from plugins.access.config_editor import ConfigEditor
-from plugins.access.wizard import ConfigWizard
-from shared.utils.event_types import Event, Priority
+from agent_framework.plugins.access.cli import CLISession
+from agent_framework.plugins.access.config_editor import ConfigEditor
+from agent_framework.plugins.access.wizard import ConfigWizard
+from agent_framework.shared.utils.event_types import Event, Priority
 
 
 class TestCLISession:

@@ -115,14 +115,14 @@ class SandboxFS:
 | 路径 | 保护级别 | 写入要求 |
 |------|----------|----------|
 | `agent_framework/` | 🔴 核心 | security_service 审批 + admin 角色确认 |
-| `shared/interfaces/` | 🔴 核心 | security_service 审批 + admin 角色确认 |
+| `agent_framework/shared/interfaces/` | 🔴 核心 | security_service 审批 + admin 角色确认 |
 | `main.py` | 🔴 核心 | security_service 审批 + admin 角色确认 |
 | `role/suri/` | 🔴 核心 | security_service 审批 + suri_hr 确认 |
-| `plugins/*/plugin.py` | 🟡 敏感 | security_service 审批 |
+| `agent_framework/plugins/*/plugin.py` | 🟡 敏感 | security_service 审批 |
 | `~/.suri/config.json` | 🟡 敏感 | config_service 专用 API |
 | `roles/{role_id}/`（非 suri）| 🟢 普通 | 归属角色自身可写，其他角色需审批 |
 
-**迭代 1 实际实现**：security_service 插件在 `can_write()` 中硬编码禁止写入 `agent_framework/`、`shared/interfaces/`、`main.py`，无需审批令牌直接拒绝，发布 `error.tool`（error_code=1102）。
+**迭代 1 实际实现**：security_service 插件在 `can_write()` 中硬编码禁止写入 `agent_framework/`、`agent_framework/shared/interfaces/`、`main.py`，无需审批令牌直接拒绝，发布 `error.tool`（error_code=1102）。
 
 ---
 
