@@ -37,6 +37,24 @@
 - `llm.request` → 记录模型请求到 runtime 分类
 - `task.created` / `task.completed` / `task.failed` → 记录到 schedule 分类
 
+### 三清单变更日志（新增）
+
+订阅三清单相关事件，记录所有注册表变更：
+
+| 事件 | 分类 | 说明 |
+|------|------|------|
+| `role.registered` / `role.updated` / `role.deprecated` | system | 角色清单变更日志 |
+| `plugin.registered` / `plugin.updated` / `plugin.deprecated` | system | 插件清单变更日志 |
+| `tool.registered` / `tool.updated` / `tool.deprecated` | system | 工具清单变更日志 |
+| `triple.registry.synced` | system | 三清单同步完成日志 |
+| `role.skill_added` / `role.skill_removed` | role | 技能变更日志 |
+
+每个三清单变更事件记录内容包括：
+- 变更类型（registered / updated / deprecated / removed）
+- 变更对象信息（ID、名称、版本）
+- 变更前后对比（关键字段 diff）
+- 触发源（插件/用户/自动）
+
 ### 发布事件
 - 不发布事件（纯消费者）
 

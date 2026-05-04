@@ -17,5 +17,18 @@
       "enable_telegram": { "type": "boolean", "default": false },
       "telegram_token_env": { "type": "string", "default": "SURI_TELEGRAM_TOKEN" }
     }
-  }
+  },
+  "commands": [
+    {"name": "status", "usage": "/status", "desc": "查看系统运行状态", "args": []},
+    {"name": "reload", "usage": "/reload", "desc": "重载配置文件", "args": []},
+    {"name": "clear", "usage": "/clear", "desc": "清空会话上下文", "args": []},
+    {"name": "logs", "usage": "/logs", "desc": "查看日志路径与最近日志文件", "args": []},
+    {"name": "config", "usage": "/config [key]", "desc": "查看配置概要或指定配置项", "args": [{"name": "key", "required": false, "desc": "配置键路径"}]},
+    {"name": "reconfig", "usage": "/reconfig", "desc": "进入交互式配置编辑菜单", "args": []},
+    {"name": "plugins", "usage": "/plugins", "desc": "列出所有已加载的插件", "args": []},
+    {"name": "plugin", "usage": "/plugin <编号|名称> [操作]", "desc": "查看插件详情或管理", "args": [{"name": "目标", "required": true, "desc": "插件编号或名称"}, {"name": "操作", "required": false, "desc": "start|stop|restart|upgrade|remove"}]},
+    {"name": "sessions", "usage": "/sessions", "desc": "查看会话统计信息", "args": []},
+    {"name": "history", "usage": "/history", "desc": "显示最近命令历史", "args": []},
+    {"name": "hotreload", "usage": "/hotreload", "desc": "查看热更新系统状态", "args": []}
+  ]
 }

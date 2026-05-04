@@ -105,7 +105,88 @@ Markdown body 中至少包含：
 
 ---
 
-## 四、生成方式
+## 四、完整 Soul Schema 参考
+
+### 4.1 完整 frontmatter 字段（含可选字段）
+
+```yaml
+---
+# == 基础标识（必填）==
+role_id: "doc_writer"              # 唯一标识，小写+下划线
+nickname: "文档撰写员"              # 显示名称
+role_type: "worker"                # core / worker / admin / project_director
+
+# == 版本管理（必填）==
+version: "1.0.0"                   # 语义化版本（major.minor.patch）
+created_at: "2024-01-15T10:00:00Z" # ISO 8601
+updated_at: "2024-06-01T08:30:00Z" # ISO 8601
+upgrade_history:                   # 升级历史（可选，追加记录）
+  - version: "0.5.0"
+    date: "2024-03-01"
+    change: "初始创建"
+  - version: "1.0.0"
+    date: "2024-06-01"
+    change: "正式版发布"
+
+# == 能力声明（必填）==
+capabilities:                      # 能力清单，用于能力匹配
+  - "产品文档撰写"
+  - "技术文档撰写"
+  - "需求分析"
+  - "文档评审"
+keywords:                          # 搜索关键词
+  - "文档"
+  - "写作"
+  - "需求"
+
+# == 技能绑定（必填）==
+skills:                            # 技能 ID 列表（指向 skills/{id}.json）
+  - "document_writing"             # 必须对应 skills/ 下的技能文件
+  - "api_documentation"            # 缺失时 role_manager 报 warning
+
+# == 运行参数（可选）==
+context_window: 8000               # 默认 8000
+temperature: 0.7                   # 默认 0.7
+max_tokens_per_response: 4096      # 单次响应最大 token，默认 4096
+
+# == 资源限制（可选）==
+resource_limits:                   # 覆盖系统默认值
+  cpu_time_seconds: 300            # 单任务 CPU 时间，默认 300
+  memory_mb: 512                   # 单任务内存限制，默认 512
+
+# == 通信偏好（可选）==
+communication:
+  max_concurrent_messages: 5       # 最大并发消息数
+  response_timeout_seconds: 60     # 消息响应超时
+
+# == 生命周期（可选）==
+lifecycle:
+  status: "active"                 # active / paused / archived / deprecated
+  auto_archive_days: 90            # 无活动自动归档天数（默认 90）
+  last_active_at: "2024-06-01T08:30:00Z"  # 最后活跃时间
+---
+```
+
+### 4.2 额外字段说明
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `upgrade_history` | array | ❌ | [] | 版本升级记录，每次修改 soul.md 追加一条 |
+| `max_tokens_per_response` | int | ❌ | 4096 | 单次 LLM 响应最大 token 数 |
+| `resource_limits` | object | ❌ | 系统默认 | 覆盖系统级资源限制 |
+| `resource_limits.cpu_time_seconds` | int | ❌ | 300 | 单任务 CPU 时间上限 |
+| `resource_limits.memory_mb` | int | ❌ | 512 | 单任务内存上限 |
+| `communication` | object | ❌ | 系统默认 | 通信相关参数 |
+| `communication.max_concurrent_messages` | int | ❌ | 5 | 最大并发消息数 |
+| `communication.response_timeout_seconds` | int | ❌ | 60 | 消息响应超时 |
+| `lifecycle` | object | ❌ | — | 生命周期管理 |
+| `lifecycle.status` | string | ❌ | "active" | active / paused / archived / deprecated |
+| `lifecycle.auto_archive_days` | int | ❌ | 90 | 无活动自动归档天数 |
+| `lifecycle.last_active_at` | datetime | ❌ | — | 最后活跃时间 |
+
+---
+
+## 五、生成方式
 
 suri 通过 LLM 根据用户需求和角色模板生成 Soul 草案，流程：
 
@@ -115,7 +196,7 @@ suri 通过 LLM 根据用户需求和角色模板生成 Soul 草案，流程：
     ▼
 suri 调用 llm_gateway
     ├─ 输入：角色模板 + 用户需求
-    ├─ 输出：完整的 soul.md 内容
+    ├─ 输出：完整的 soul.md 内容（含 frontmatter）
     └─ 参数：temperature=0.7, max_tokens=2000
     │
     ▼
@@ -124,3 +205,24 @@ suri 呈现草案给用户确认
     ├── 确认 → role_manager.create_role()
     ├── 修改 → 根据反馈调整
     └── 取消 → 流程终止
+```
+
+### 升级流程（Soul 更新）
+
+```
+升级触发（role_learner 建议 / suri 主动 / 用户要求）
+    │
+    ▼
+suri 生成 Soul 更新方案（新版本 soul.md）
+    │
+    ▼
+用户确认
+    │
+    ├── 确认 → role_manager.update_soul()
+    │          ├── 备份当前 soul.md 到 ~/.suri/backup/soul/{role_id}_v{old_version}.md
+    │          ├── 写入新 soul.md
+    │          ├── 追加 upgrade_history
+    │          └── 广播 role.soul_updated（或 role.skill_added/role.skill_removed）
+    ├── 修改 → 调整
+    └── 取消 → 流程终止
+```

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent_framework.plugins.role_manager.plugin import RoleManagerPlugin
+from agent_framework.plugins.capability.role_manager.plugin import RoleManagerPlugin
 from agent_framework.shared.utils.event_types import Event, Priority
 
 
@@ -185,7 +185,7 @@ class TestRoleManagerPlugin:
             plugin._roles = {}
             
             event = Event(
-                event_type="role.create",
+                event_type="role.create_requested",
                 source="test",
                 payload={
                     "name": "new_role",

@@ -5,8 +5,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import unittest
-from agent_framework.plugins.agent_registry.plugin import AgentRegistryPlugin
-from agent_framework.plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
+from agent_framework.plugins.execution.agent_registry.plugin import AgentRegistryPlugin
+from agent_framework.plugins.extension.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
 from agent_framework.shared.interfaces.plugin import TaskStep
 
 
@@ -16,7 +16,11 @@ class TestAgentRegistryPlugin(TestBase):
     async def asyncSetUp(self):
         await super().asyncSetUp()
         self.harness = PluginTestHarness(self.bus)
-        self.plugin = await self.harness.load_plugin(AgentRegistryPlugin)
+        self.plugin = await self.harness.load_plugin(
+            AgentRegistryPlugin,
+            config={"agent_registry": {"db_path": ":memory:"}},
+        )
+        self.plugin.clear_db()
     
     def test_create_agent(self):
         """测试创建 Agent"""

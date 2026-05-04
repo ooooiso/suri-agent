@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import unittest
 
-from agent_framework.plugins.security_service.plugin import SecurityServicePlugin
+from agent_framework.plugins.service.security_service.plugin import SecurityServicePlugin
 
 
 class TestSecurityService(unittest.TestCase):

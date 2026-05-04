@@ -59,6 +59,30 @@
 - 依赖方订阅 `plugin.upgraded` 事件，自动检查兼容性
 - 不兼容时发布 `plugin.incompatible` 事件，框架阻止升级
 
+### 原则 5：所有变更通过三清单 + 广播通知
+
+```
+✅ 正确: 角色/工具/插件变更 → 更新对应清单 → 发布事件 → 相关方感知
+❌ 错误: 变更后不通知，依赖方不知道变化
+```
+
+**规则**：
+- 角色变更 → role_manager 更新 Role Registry → 广播 `role.*` 事件
+- 工具变更 → mcp_framework 更新 Tool Registry → 广播 `tool.*` 事件
+- 插件变更 → plugin_manager 更新 Plugin Registry → 广播 `plugin.*` 事件
+- 项目变更 → 更新角色 active_projects → 广播 `project.*` 事件
+
+### 原则 6：上下文三层隔离
+
+```
+角色的记忆分为三层，严格隔离：
+  Ad-hoc 层：临时会话，聊完7天清理
+  Project 层：项目工作，切换时保存快照
+  Global 层：全局共享，沉淀通用技能
+
+不同上下文的记忆互不混淆，LLM 只加载当前上下文的记忆。
+```
+
 ---
 
 ## 二、插件间解耦
@@ -131,7 +155,7 @@ async def _dispatch(self, event):
 ### 3.1 角色是数据，插件是逻辑
 
 ```
-角色 (Role) = 数据（Soul 文件、技能、记忆）
+角色 (Role) = 数据（Soul 文件、技能、三层记忆）
 插件 (Plugin) = 逻辑（处理事件、调用 LLM、操作文件）
 
 角色不包含逻辑，插件不包含角色数据
@@ -139,19 +163,19 @@ async def _dispatch(self, event):
 
 **规则**：
 - 角色数据存储在 `roles/{role_id}/` 目录下（Git 管理）
-- 插件逻辑在 `agent_framework/plugins/{plugin_name}/` 目录下
+- 插件逻辑在 `agent_framework/plugins/{type}/{plugin_name}/` 目录下
 - 插件通过 role_manager 获取角色数据，不直接读取角色文件
 
-### 3.2 角色切换不影响插件
+### 3.2 上下文切换不影响插件
 
 ```
-✅ 正确: 切换角色 → role_manager 更新 system prompt → 插件继续工作
-❌ 错误: 切换角色 → 需要重新加载插件
+✅ 正确: 切换项目 → memory_service 加载新 context → 插件继续工作
+❌ 错误: 切换项目 → 需要重新加载插件
 ```
 
 **规则**：
 - 插件不绑定特定角色
-- 角色切换只影响 system prompt 和上下文，不影响插件运行
+- 项目/上下文切换只影响 system prompt 和记忆，不影响插件运行
 - 新增角色不需要修改任何插件代码
 
 ### 3.3 角色能力通过事件暴露
@@ -177,9 +201,10 @@ async def _dispatch(self, event):
 | 配置 | `~/.suri/config.json` | 模型选择、超时时间 | ✅ |
 | 模板 | `~/.suri/data/templates/` | Soul 模板、任务模板 | ✅ |
 | 关键词 | `~/.suri/data/configs/` | 中断关键词 | ✅ |
-| 角色数据 | `roles/{role_id}/` | Soul 文件、技能、记忆 | ✅ |
+| 角色数据 | `roles/{role_id}/` | Soul 文件、技能、三层记忆 | ✅ |
 | 插件数据 | `~/.suri/data/plugins/` | 各插件专属数据 | ✅ |
-| 代码逻辑 | `agent_framework/plugins/{name}/plugin.py` | 事件处理、业务逻辑 | ❌（需升级流程）|
+| 三清单数据 | `~/.suri/data/registries/` | Role/Plugin/Tool Registry | ✅ |
+| 代码逻辑 | `agent_framework/plugins/{type}/{name}/plugin.py` | 事件处理、业务逻辑 | ❌（需升级流程）|
 
 ### 4.2 数据加载模式
 
@@ -187,7 +212,6 @@ async def _dispatch(self, event):
 # ✅ 正确：从外部文件加载数据
 class TaskPlannerPlugin:
     def _load_templates(self):
-        # 从外部 YAML 文件加载模板
         templates_path = Path("~/.suri/data/templates/task_templates.yaml")
         if templates_path.exists():
             with open(templates_path) as f:
@@ -256,58 +280,31 @@ class TaskPlannerPlugin:
 # - 模板从外部 YAML 文件加载
 # - 支持热更新（订阅 config.updated 事件）
 # - 向后兼容（v1.0.0 的调用方无需修改）
-
-# 变更内容：
-# 1. 新增 _load_templates_from_file() 方法
-# 2. 新增 _on_config_updated() 事件处理
-# 3. 保留 _load_builtin_templates() 作为 fallback
-# 4. manifest.json 版本从 "1.0.0" 改为 "1.1.0"
 ```
 
 ---
 
 ## 六、角色与项目固化原则
 
-### 关键原则：角色数据全部在 roles/ 下，纳入版本控制
+### 关键原则：角色定义与运行时数据分离
 
-**设计定位**：suri-agent 是"末日程序"，角色数据（Soul 定义、记忆、技能、产出）比代码更宝贵。Git clone 即可恢复全部角色状态。
+> ⚠️ **角色数据存储的详细规范已统一在 `operations/framework-rules.md §三` 中定义。**
+> 本节仅列出原则性约束，具体目录结构和字段定义请参见 framework-rules.md。
 
-**策略**：
+**设计定位**：suri-agent 是"末日程序"，角色**定义**（Soul、技能描述）比代码更宝贵。Git clone 即可恢复全部角色状态。
 
-```
-roles/（Git 管理，包含全部角色数据，可迁移可回溯）
-  ├── soul.md         ← 角色定义与职责描述
-  ├── memories/       ← 角色记忆、insights
-  ├── skills/         ← 角色技能文件
-  └── output/         ← 角色产出文件
+**核心分离原则**：
 
-代码仓库（仅存放代码逻辑）
-  ├── agent_framework/plugins/        ← 插件代码
-  ├── agent_framework/ ← 框架代码
-  └── main.py         ← 入口
+| 层级 | 位置 | 入 Git | 说明 |
+|------|------|--------|------|
+| 角色**定义** | `roles/{role_id}/` | ✅ 是 | soul.md / skills/ / meta.json |
+| 角色**运行时** | `~/.suri/runtime/roles/{role_id}/` | ❌ 否 | 记忆库 DB / context 快照 |
+| 系统配置 | `~/.suri/` | ❌ 否 | API Key、日志、模板 |
 
-~/.suri/（仅系统级敏感配置 + 运行时日志，不纳入 Git）
-  ├── config.json    ← API Key、模型选择等敏感配置
-  └── runtime/logs/  ← 运行时日志
-```
-
-**迁移到新机器的标准步骤**：
-
-```
-1. git clone <repo-url>              # 代码 + 角色数据一次性拉取
-2. 复制 ~/.suri/config.json          # 单独复制敏感配置
-3. 运行 main.py → 系统直接就绪       # 角色数据无需额外操作
-```
-
-**与代码仓库的关系**：
-- ✅ 角色数据在 `roles/` 下随 Git 一起管理版本
-- ✅ 可单独使用 `roles/` 子目录做角色备份恢复
-- ❌ 不是"模板复制到运行时"模式——角色数据自包含、自解释
-- ❌ 敏感配置（API Key）不进入 Git，保持在 `~/.suri/config.json`
 
 ---
 
-## 八、解耦度评估矩阵
+## 七、解耦度评估矩阵
 
 | 维度 | 当前评分 | 目标评分 | 关键措施 |
 |------|---------|---------|---------|
@@ -316,11 +313,13 @@ roles/（Git 管理，包含全部角色数据，可迁移可回溯）
 | 角色与插件解耦 | ⭐⭐⭐☆☆ | ⭐⭐⭐⭐⭐ | role_manager 不再代理 suri |
 | 独立迭代能力 | ⭐⭐⭐☆☆ | ⭐⭐⭐⭐⭐ | 版本协商 + 升级通知 |
 | 错误隔离 | ⭐⭐⭐⭐☆ | ⭐⭐⭐⭐⭐ | EventBus 全局异常捕获 |
+| 上下文隔离 | ⭐⭐☆☆☆ | ⭐⭐⭐⭐⭐ | 三层隔离体系（Ad-hoc/Project/Global） |
+| 变更广播 | ⭐⭐☆☆☆ | ⭐⭐⭐⭐⭐ | 三清单 + 16种变更事件 |
 | 测试独立性 | ⭐⭐⭐☆☆ | ⭐⭐⭐⭐⭐ | 每个插件独立测试套件 |
 
 ---
 
-## 九、常见反模式
+## 八、常见反模式
 
 ### 反模式 1：插件间直接调用
 
@@ -366,7 +365,6 @@ class InterruptHandlerPlugin:
 # ❌ 错误
 class RoleManagerPlugin:
     async def _on_user_input(self, event):
-        # 直接代理 suri 角色，与 suri 逻辑耦合
         soul = self._read_soul("suri")
         prompt = self._build_prompt(soul)
         await self._event_bus.publish(Event(
@@ -374,21 +372,20 @@ class RoleManagerPlugin:
             payload={"messages": [{"role": "system", "content": prompt}]}
         ))
 
-# ✅ 正确
+# ✅ 正确：只提供角色数据，不代理角色逻辑
 class RoleManagerPlugin:
     async def _on_user_input(self, event):
-        # 只提供角色数据，不代理角色逻辑
         role_id = event.payload.get("role_id", "suri")
         soul = self.get_soul(role_id)
         await self._event_bus.publish(Event(
-            event_type="role.context_ready",  # 角色上下文就绪事件
+            event_type="role.context_ready",
             payload={
                 "role_id": role_id,
                 "soul": soul,
                 "session_id": event.payload.get("session_id"),
+                "project_id": event.payload.get("project_id"),
             }
         ))
-        # suri 角色自己订阅 role.context_ready 事件
 ```
 
 ### 反模式 4：共享可变状态
@@ -398,15 +395,27 @@ class RoleManagerPlugin:
 # global_state.py
 agent_contexts = {}  # 全局可变字典，多个插件共享
 
-# plugin_a.py
-from global_state import agent_contexts
-agent_contexts["agent_001"] = {...}  # 直接修改
-
-# plugin_b.py
-from global_state import agent_contexts
-data = agent_contexts["agent_001"]  # 依赖其他插件的修改
-
 # ✅ 正确
 # 通过 EventBus 传递状态变更事件
 # plugin_a 发布 agent.context_updated 事件
 # plugin_b 订阅 agent.context_updated 事件
+```
+
+### 反模式 5：单库存储所有记忆
+
+```python
+# ❌ 错误
+class MemoryService:
+    def get_messages(self, role_id):
+        db = self._get_db(role_id)  # 所有数据混在一个 role.db
+        return db.query("SELECT * FROM messages ...")
+
+# ✅ 正确：三层隔离存储
+class MemoryService:
+    def get_messages(self, role_id, session_id=None, project_id=None):
+        if session_id:
+            return self._get_adhoc_db(role_id, session_id)  # Ad-hoc 层
+        elif project_id:
+            return self._get_project_db(role_id, project_id)  # Project 层
+        else:
+            return self._get_global_db(role_id)  # Global 层

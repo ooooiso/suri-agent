@@ -85,9 +85,13 @@ class ConfigEditor:
             prov_cfg["models"] = models
             prov_cfg["default_model"] = models[0]
         
-        # 如果是第一个厂商，设为默认
-        if "default_provider" not in llm_cfg:
+        # 如果是第一个厂商或当前没有默认厂商，设为默认
+        if "default_provider" not in llm_cfg or not llm_cfg.get("default_provider"):
             llm_cfg["default_provider"] = provider
+        # 如果 deepseek 已有 default_model 配置，保留；否则用第一个
+        if "default_model" not in prov_cfg or not prov_cfg.get("default_model"):
+            if models:
+                prov_cfg["default_model"] = models[0]
         
         if self.save_config(config):
             print(f"[Suri] {provider} 的 API Key 已保存。")

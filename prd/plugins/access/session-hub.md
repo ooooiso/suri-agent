@@ -52,9 +52,9 @@ session-hub 是 access 体系的主插件，负责：
 | `suspended` | 会话挂起 | 用户切走（Telegram 临时消息） |
 | `expired` | 会话过期 | 超时（默认 30 分钟） |
 
-### 会话上下文
+### 会话上下文（三层隔离）
 
-每个 session 维护上下文：
+每个 session 维护上下文，并感知三层隔离层级：
 
 ```python
 @dataclass
@@ -67,7 +67,45 @@ class Session:
     last_active_at: float
     capabilities: ChannelCapabilities  # 该通道的能力矩阵
     context: dict            # 当前会话关联的角色、任务等
+    
+    # ★ 三层上下文隔离感知
+    isolation_layer: str = "adhoc"      # adhoc / project / global
+    project_id: Optional[str] = None    # 仅在 project 层有效
+    adhoc_expire_at: Optional[float] = None  # Ad-hoc 层过期时间（创建+7天）
 ```
+
+### 三层隔离的会话管理
+
+```
+用户发起会话
+    │
+    ├── 默认：Ad-hoc 层会话
+    │   ├── session.isolation_layer = "adhoc"
+    │   ├── 7天自动过期清理
+    │   ├── 仅使用临时记忆
+    │   └── 不关联任何项目
+    │
+    ├── 加入项目后 → Project 层会话
+    │   ├── session.isolation_layer = "project"
+    │   ├── session.project_id = "ecommerce_app"
+    │   ├── 使用项目专属记忆/知识/wiki
+    │   └── 切换项目时 session 自动切换
+    │
+    └── 全局配置 → Global 层会话
+        ├── session.isolation_layer = "global"
+        ├── 跨项目通用设置
+        └── 共享全局记忆
+
+会话切换流程：
+  Ad-hoc → Project:  用户选择项目 → session.project_id 设定
+  Project → Ad-hoc:  用户退出项目 → session.project_id 清空
+  Project → Project: 用户切换项目 → session.project_id 更新（记忆隔离）
+```
+
+会话的 `project_id` 和 `isolation_layer` 将传递给：
+1. `_meta` 中的 `project_id` 字段（工具调用上下文中）
+2. memory_service 的 DB 选择（ad-hoc.db / project.db / global.db）
+3. 所有事件中的 context 信息（用于过滤和隔离）
 
 ---
 
@@ -248,7 +286,68 @@ session_hub:
 
 ---
 
-## 七、替换了原来的 access.md
+## 七、统计接口（迭代 2）
+
+> `/sessions` 命令的数据来源。SessionHub 提供 `get_stats()` 方法返回会话统计信息。
+
+### 7.1 返回结构
+
+```python
+@dataclass
+class SessionStats:
+    total_sessions: int                    # 历史累计会话数
+    active_sessions: int                   # 当前活跃（active + idle）会话数
+    sessions_by_channel: Dict[str, int]    # 按通道类型统计: {"cli": 5, "tg": 2}
+    sessions_by_state: Dict[str, int]      # 按状态统计: {"active": 3, "idle": 2, "expired": 10}
+    avg_session_duration_min: float        # 平均会话持续时长（分钟）
+    messages_total: int                    # 历史总消息数
+    messages_today: int                    # 今日消息数
+    top_channels: List[str]                # 最活跃的通道排行
+    hot_reload_status: Dict[str, Any]      # 热更新系统状态
+        - running: bool                    # FileWatcher 是否在运行
+        - watch_dirs: List[str]            # 监听目录
+        - interval: float                  # 轮询间隔
+        - changed_files: List[str]         # 最近检测到的变更文件
+        - last_reload_time: float          # 最近一次热更新时间戳
+    plugin_stats: Dict[str, Any]           # 插件汇总统计
+        - total: int                       # 总插件数
+        - running: int                     # 运行中
+        - stopped: int                     # 已暂停
+        - failed: int                      # 加载失败
+        - upgrading: int                   # 升级中
+        - by_type: Dict[str, int]          # 按类型分类
+```
+
+### 7.2 数据来源
+
+| 字段 | 来源 |
+|------|------|
+| `sessions` 相关 | SessionHub 内部 `_sessions` 字典 |
+| `messages` 相关 | log_service 统计 |
+| `hot_reload_status` | HotReloadManager 实时状态 |
+| `plugin_stats` | PluginManager 遍历计算 |
+
+### 7.3 终端渲染
+
+```
+> /sessions
+
+┌────────────────────────────────────────────────┐
+│  Suri Session 会话统计                          │
+├────────────────────────────────────────────────┤
+│  当前会话: active (CLI)                        │
+│  ─────────────────────────────────────         │
+│  历史累计会话:        28                       │
+│  今日消息:            156                      │
+│  插件总数:            15 / 15 运行中           │
+│  热更新状态:          ✅ 运行中 (2s 轮询)     │
+│  最近重载:            formatter.py (12s前)    │
+└────────────────────────────────────────────────┘
+```
+
+---
+
+## 八、替换了原来的 access.md
 
 原 `access.md` 中关于：
 - 多通道接入 → 迁移到各通道独立文档 + session-hub 通道注册

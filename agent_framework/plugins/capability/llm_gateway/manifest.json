@@ -1,0 +1,36 @@
+{
+  "manifest_version": "1.0",
+  "name": "llm_gateway",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "service",
+  "description": "5 家国内大模型路由与多版本管理",
+  "author": "",
+  "permissions": ["system.*"],
+  "event_subscriptions": ["llm.request", "user.command", "system.config_changed"],
+  "fs_permissions": {},
+  "runtime_mutable": true,
+  "dependencies": ["suri_core", "config_service"],
+  "config_schema": {
+    "llm_gateway": {
+      "default_provider": { "type": "string", "default": "deepseek" },
+      "providers": {
+        "type": "object",
+        "default": {
+          "wenxin": { "models": ["ernie-4.0", "ernie-3.5"], "base_url": "https://aip.baidubce.com" },
+          "tongyi": { "models": ["qwen-max", "qwen-plus"], "base_url": "https://dashscope.aliyuncs.com" },
+          "chatglm": { "models": ["glm-4", "glm-3-turbo"], "base_url": "https://open.bigmodel.cn" },
+          "kimi": { "models": ["moonshot-v1-8k", "moonshot-v1-32k"], "base_url": "https://api.moonshot.cn" },
+          "deepseek": { "models": ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat"], "base_url": "https://api.deepseek.com" }
+        }
+      }
+    }
+  },
+  "commands": [
+    {"name": "switch", "usage": "/switch <厂商> [模型]", "desc": "切换 LLM 厂商及模型", "args": [{"name": "厂商", "required": true, "desc": "厂商名"}, {"name": "模型", "required": false, "desc": "模型名"}]},
+    {"name": "setkey", "usage": "/setkey <厂商> [key]", "desc": "修改 API Key", "args": [{"name": "厂商", "required": true, "desc": "厂商名"}, {"name": "key", "required": false, "desc": "API Key"}]},
+    {"name": "models", "usage": "/models", "desc": "列出所有可用厂商和模型及状态", "args": []},
+    {"name": "model", "usage": "/model", "desc": "查看当前激活的模型", "args": []}
+  ]
+}

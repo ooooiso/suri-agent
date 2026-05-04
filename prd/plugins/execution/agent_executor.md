@@ -1,0 +1,698 @@
+# Agent Executor 插件 PRD
+
+> **角色执行引擎**。Agent（角色）的核心执行循环，将"事件驱动"与"LLM 驱动"衔接起来。
+> 这是整个系统的**执行中枢**——所有角色的自主行为均由本插件驱动。
+
+---
+
+## 一、定位
+
+Agent Executor 是角色的"大脑执行回路"：
+
+| 职责 | 说明 |
+|------|------|
+| **Agent Loop** | 角色的事件循环：接收事件 → 构建 Context → 调 LLM → 解析输出 → 执行动作 → 循环 |
+| **Context Builder** | 构建五层 Context（system/session/task/history/memory） |
+| **LLM Parser** | 解析 LLM 输出（function calling / tool_call / 自然语言降级） |
+| **Scheduler** | 决策"何时调 LLM"、"攒多少条消息再调"、"优先处理哪个对话" |
+| **Memory Manager** | 执行结束后自动异步保存记忆 |
+
+**关键约束**：
+
+- ❌ 不替代 role_comm（只**发**角色间消息，不存储、不路由）
+- ❌ 不替代 task_planner（只**执行**步骤，不分解任务）
+- ❌ 不替代 llm_gateway（只**调** LLM，不管理并发/预算/限流）
+- ✅ 只做"接收事件 → 决策 → 调 LLM → 解析 → 执行"这一核心回路
+
+---
+
+## 二、Agent Loop 核心流程
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    Agent Executor Loop                           │
+│                                                                  │
+│  ▸ 每个角色在 agent_executor 中注册一个执行实例                   │
+│  ▸ 一个角色一个执行实例（同一角色不并行处理）                     │
+│  ▸ 事件驱动：有事件才调 LLM，无事件自休眠                        │
+│                                                                  │
+│  while True:                                                     │
+│    ┌─────────────────────────────────────────────────────┐       │
+│    │ 1. 事件接收器（非阻塞）                              │       │
+│    │    ├── 订阅事件：user.input / role.message_received  │       │
+│    │    │          / task.assigned / interrupt.* 等       │       │
+│    │    ├── 按 session/dialog 分组入队                    │       │
+│    │    └── 匹配到角色自身的事件才处理                    │       │
+│    └─────────────────────────────────────────────────────┘       │
+│                              │                                    │
+│                              ▼                                    │
+│    ┌─────────────────────────────────────────────────────┐       │
+│    │ 2. 调度决策器（纯代码，Token=0）                     │       │
+│    │    ├── 检查当前是否有未处理完的任务                  │       │
+│    │    ├── 有 → 继续执行（不新调 LLM）                   │       │
+│    │    ├── 无 → 判断优先级                              │       │
+│    │    │     ├── urgent（interrupt.*）→ 立即调 LLM       │       │
+│    │    │     ├── high（user.input）→ 攒 500ms 或立即调  │       │
+│    │    │     └── normal（role.message）→ 攒 2s 再调     │       │
+│    │    └── 所有决策不需要 LLM                            │       │
+│    └─────────────────────────────────────────────────────┘       │
+│                              │                                    │
+│                              ▼                                    │
+│    ┌─────────────────────────────────────────────────────┐       │
+│    │ 3. Context Builder（构建 LLM 完整上下文）            │       │
+│    │    ├── system_layer = soul.md + 技能 + tool_desc    │       │
+│    │    ├── session_layer = 项目上下文 + 会话目标        │       │
+│    │    ├── task_layer = 当前任务状态 + 未完成的步骤      │       │
+│    │    ├── history_layer = 最近对话（最多 20 条）       │       │
+│    │    └── memory_layer = 按相关性检索的记忆片段         │       │
+│    └─────────────────────────────────────────────────────┘       │
+│                              │                                    │
+│                              ▼                                    │
+│    ┌─────────────────────────────────────────────────────┐       │
+│    │ 4. LLM Call（调 llm_gateway）                       │       │
+│    │    ├── 发布 llm.request 事件                        │       │
+│    │    ├── 携带完整 Context + 工具定义                  │       │
+│    │    └── 等待 llm.response 返回                       │       │
+│    └─────────────────────────────────────────────────────┘       │
+│                              │                                    │
+│                              ▼                                    │
+│    ┌─────────────────────────────────────────────────────┐       │
+│    │ 5. LLM Parser（解析 LLM 输出）                      │       │
+│    │    ├── 检测是否有 function calling / tool_call       │       │
+│    │    │   ├── 有 → 提取并执行                          │       │
+│    │    │   └── 无 → 检测是否为自然语言                  │       │
+│    │    │         ├── 含明确意图 → 二次解析降级          │       │
+│    │    │         └── 纯文本回复 → 直接输出              │       │
+│    │    └── 所有解析工作不额外调 LLM（降级方案除外）      │       │
+│    └─────────────────────────────────────────────────────┘       │
+│                              │                                    │
+│                              ▼                                    │
+│    ┌─────────────────────────────────────────────────────┐       │
+│    │ 6. Executor（执行动作）                             │       │
+│    │    ├── tool_call → tool.call 事件 → mcp_framework  │       │
+│    │    ├── 发消息 → role.message 事件 → role_comm       │       │
+│    │    ├── 回用户 → 发布 llm.response → session-hub    │       │
+│    │    ├── 调插件 → 发布对应插件事件                   │       │
+│    │    └── 执行技能 → 角色技能映射到工具调用           │       │
+│    └─────────────────────────────────────────────────────┘       │
+│                              │                                    │
+│                              ▼                                    │
+│    ┌─────────────────────────────────────────────────────┐       │
+│    │ 7. 循环决策（纯代码，Token=0）                      │       │
+│    │    ├── 还有未完成步骤？→ 回到 Step 3（继续）        │       │
+│    │    ├── 等待外部事件？→ 回到 Step 1（休眠）          │       │
+│    │    └── 任务全部完成？→ 异步保存记忆                 │       │
+│    └─────────────────────────────────────────────────────┘       │
+│                              │                                    │
+│                              ▼                                    │
+│    ┌─────────────────────────────────────────────────────┐       │
+│    │ 8. Memory Manager（异步保存，不阻塞主循环）           │       │
+│    │    ├── 保存本次对话到对应隔离层 DB                  │       │
+│    │    ├── 如果 history 超长 → 触发异步压缩             │       │
+│    │    └── 触发 role_learner（可选）                    │       │
+│    └─────────────────────────────────────────────────────┘       │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 三、事件驱动 — 角色如何"醒来"
+
+### 3.1 角色注册与唤醒
+
+```python
+# agent_executor 启动后，为每个角色注册一个执行实例
+class AgentExecutorPlugin:
+    """Agent 执行引擎"""
+    
+    _agents: dict[str, AgentLoop] = {}  # role_id → AgentLoop
+    
+    async def register_role(self, role_id: str):
+        """为角色注册 Agent Loop"""
+        loop = AgentLoop(
+            role_id=role_id,
+            event_bus=self.event_bus,
+            config=self.config.get(role_id, {})
+        )
+        self._agents[role_id] = loop
+        await loop.start()
+    
+    async def on_role_created(self, event: Event):
+        """新角色创建时自动注册"""
+        role_id = event.payload["role_id"]
+        await self.register_role(role_id)
+```
+
+### 3.2 事件到 LLM 的触发映射
+
+| 事件 | 优先级 | 攒批策略 | 触发 LLM？ | 说明 |
+|------|--------|---------|-----------|------|
+| `user.input` | high | 500ms | ✅ 立即 | 用户消息，必须尽快响应 |
+| `user.command` | high | 0ms | ❌ | 纯命令解析，不走 LLM |
+| `role.message_received` | normal | 2s | ✅ 攒批 | 角色消息，可等一批 |
+| `task.assigned` | high | 0ms | ✅ 立即 | 任务分配需要分析 |
+| `interrupt.escalated` | urgent | 0ms | ✅ 立即 | 中断需要人工，先通知 |
+| `cron.task` | normal | 0ms | ✅ | 定时任务 |
+| `tool.result` | normal | 0ms | ✅ | 工具结果需注入 context |
+| `system.notification` | low | 5s | ⚠️ 仅重要 | 系统通知，可忽略 |
+
+**调度决策是纯代码逻辑**：以上映射表硬编码在 scheduler.py 中，不需要 LLM 判断何时调 LLM。
+
+---
+
+## 四、Context Builder 实现
+
+### 4.1 五层 Context 构建
+
+```python
+class ContextBuilder:
+    """构建 LLM 调用的五层 Context"""
+    
+    async def build(
+        self,
+        role_id: str,
+        session_id: str,
+        project_id: str = None,
+        task_id: str = None,
+        isolation_layer: str = "adhoc"
+    ) -> list[dict]:
+        """构建完整 Context（消息列表格式）"""
+        
+        messages = []
+        
+        # Step 1: system_layer — 角色定义 + 技能 + 工具
+        system = await self._build_system_layer(role_id, isolation_layer)
+        messages.append({"role": "system", "content": system})
+        
+        # Step 2: memory_layer — 按注入记忆片段
+        memories = await self._build_memory_layer(role_id, project_id)
+        for mem in memories:
+            messages.append({"role": "system", "content": f"[记忆] {mem}"})
+        
+        # Step 3: session_layer — 项目/会话上下文
+        session = await self._build_session_layer(role_id, session_id, project_id)
+        if session:
+            messages.append({"role": "system", "content": session})
+        
+        # Step 4: task_layer — 当前任务状态
+        task = await self._build_task_layer(role_id, task_id)
+        if task:
+            messages.append({"role": "system", "content": task})
+        
+        # Step 5: history_layer — 对话历史
+        history = await self._build_history_layer(
+            role_id, session_id, project_id, 
+            isolation_layer=isolation_layer,
+            max_messages=20
+        )
+        messages.extend(history)
+        
+        return messages
+    
+    async def _build_system_layer(self, role_id: str, layer: str) -> str:
+        """构建 system prompt"""
+        parts = []
+        
+        # 1. Soul 文件
+        soul_path = Path(f"roles/{role_id}/soul.md")
+        if soul_path.exists():
+            parts.append(soul_path.read_text())
+        
+        # 2. 技能描述
+        skills_dir = Path(f"roles/{role_id}/skills/")
+        if skills_dir.exists():
+            for skill_file in sorted(skills_dir.glob("*.json")):
+                skill = json.loads(skill_file.read_text())
+                parts.append(f"【技能：{skill['name']}】{skill['description']}")
+        
+        # 3. 可用工具描述（从 mcp_framework 获取）
+        tools = await self._get_available_tools()
+        if tools:
+            parts.append(f"【可调用工具】\n{json.dumps(tools, ensure_ascii=False, indent=2)}")
+        
+        # 4. 模型信息
+        model_info = f"【当前模型】{self._get_current_model(role_id)}"
+        parts.append(model_info)
+        
+        return "\n\n".join(parts)
+    
+    async def _build_history_layer(
+        self, role_id: str, session_id: str, project_id: str,
+        isolation_layer: str, max_messages: int = 20
+    ) -> list[dict]:
+        """从对应隔离层 DB 取历史消息"""
+        db = self._get_role_db(role_id, isolation_layer, project_id, session_id)
+        
+        # 取最近的 N 条消息
+        rows = db.execute("""
+            SELECT role, content, msg_type, created_at 
+            FROM messages 
+            WHERE session_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        """, (session_id or project_id, max_messages)).fetchall()
+        
+        messages = []
+        for row in reversed(rows):  # 按时间正序
+            role_map = {"user": "user", "assistant": "assistant", "tool": "tool"}
+            messages.append({
+                "role": role_map.get(row["role"], "user"),
+                "content": row["content"]
+            })
+        
+        return messages
+```
+
+### 4.2 Context 压缩策略
+
+```python
+class ContextCompressor:
+    """Context 压缩（异步，不阻塞当前 LLM 调用）"""
+    
+    MAX_HISTORY_MESSAGES = 20
+    COMPRESSION_THRESHOLD = 40_000  # token
+    
+    async def maybe_compress(self, role_id: str, isolation_layer: str, 
+                            session_id: str, project_id: str):
+        """检查是否需要压缩历史"""
+        db = self._get_db(role_id, isolation_layer, project_id, session_id)
+        
+        # 估算 token 数（粗略：字符数 / 4）
+        total_chars = db.execute("""
+            SELECT SUM(LENGTH(content)) FROM messages 
+            WHERE session_id = ?
+        """, (session_id or project_id,)).fetchone()[0] or 0
+        
+        if total_chars > self.COMPRESSION_THRESHOLD:
+            await self._compress(role_id, isolation_layer, session_id, project_id)
+    
+    async def _compress(self, role_id: str, isolation_layer: str,
+                        session_id: str, project_id: str):
+        """异步压缩历史：用 LLM 生成摘要，保留最近 N 条完整消息"""
+        # 1. 获取最早的历史（减去最近 N 条）
+        db = self._get_db(role_id, isolation_layer, project_id, session_id)
+        recent_count = 5  # 保留最近 5 条完整消息
+        
+        rows = db.execute("""
+            SELECT content FROM messages 
+            WHERE session_id = ? 
+            ORDER BY created_at ASC
+        """, (session_id or project_id,)).fetchall()
+        
+        if len(rows) <= recent_count + 1:
+            return
+        
+        compress_targets = rows[:-recent_count]
+        recent_messages = rows[-recent_count:]
+        
+        # 2. 调 LLM 生成摘要（异步，不阻塞）
+        summary = await self._llm_summarize(
+            [r["content"] for r in compress_targets]
+        )
+        
+        # 3. 替换原始消息为摘要 + 最近 N 条
+        db.execute("DELETE FROM messages WHERE session_id = ?", 
+                  (session_id or project_id,))
+        db.execute("""
+            INSERT INTO messages (session_id, role, content, msg_type, created_at)
+            VALUES (?, 'system', ?, 'summary', ?)
+        """, (session_id or project_id, summary, time.time()))
+        
+        for msg in recent_messages:
+            db.execute("""
+                INSERT INTO messages (session_id, role, content, msg_type, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (session_id or project_id, msg["role"], msg["content"], 
+                  msg["msg_type"], msg["created_at"]))
+        
+        db.commit()
+```
+
+---
+
+## 五、LLM Parser 实现
+
+### 5.1 解析逻辑
+
+```python
+class LLMParser:
+    """解析 LLM 输出的结构化和非结构化内容"""
+    
+    async def parse(self, llm_response: LLMResponse) -> list[Action]:
+        """
+        解析 LLM 响应，返回动作列表。
+        
+        优先级：
+          1. function calling（首选）— 结构化工具调用
+          2. tool_call（API 返回格式）
+          3. 自然语言降级（检测到意图关键词）
+          4. 纯文本回复（无动作需求）
+        """
+        actions = []
+        
+        # 检测方式一：function calling
+        if hasattr(llm_response, "function_calls") and llm_response.function_calls:
+            for fc in llm_response.function_calls:
+                actions.append(Action(
+                    type="tool_call",
+                    tool_name=fc.name,
+                    params=json.loads(fc.arguments)
+                ))
+            return actions
+        
+        # 检测方式二：tool_calls（部分 API 返回格式）
+        if hasattr(llm_response, "tool_calls") and llm_response.tool_calls:
+            for tc in llm_response.tool_calls:
+                actions.append(Action(
+                    type="tool_call",
+                    tool_name=tc.function.name,
+                    params=json.loads(tc.function.arguments)
+                ))
+            return actions
+        
+        # 检测方式三：自然语言降级
+        content = llm_response.content
+        natural_actions = await self._natural_language_fallback(content)
+        if natural_actions:
+            actions.extend(natural_actions)
+            return actions
+        
+        # 纯文本回复
+        actions.append(Action(
+            type="text_reply",
+            content=content
+        ))
+        
+        return actions
+    
+    async def _natural_language_fallback(self, content: str) -> list[Action] | None:
+        """
+        自然语言降级方案。
+        
+        检测 LLM 是否在自然语言中表达了工具调用意图。
+        例如："帮我查一下模型列表" → tool_call(list_models)
+        
+        实现策略：
+        - 方式一：正则匹配关键词（快速，低精度）
+        - 方式二：小模型二次解析（慢，高精度，仅在方式一命中时使用）
+        """
+        # 方式一：关键词匹配
+        patterns = [
+            (r"(查|列|显示|列出)\s*(模型|工具|角色|插件)", "list_objects"),
+            (r"(切|换|设置|选择)\s*(模型|角色)", "switch_object"),
+            (r"(创建|新建|增加|添加)\s*(角色|工具|插件)", "create_object"),
+        ]
+        
+        matched = []
+        for pattern, action_type in patterns:
+            if re.search(pattern, content):
+                matched.append((action_type, content))
+        
+        if not matched:
+            return None
+        
+        # 方式二：小模型确认（仅在需要时）
+        # 这里用简单规则先实现，未来可替换为小 LLM 调用
+        actions = []
+        for action_type, text in matched:
+            if action_type == "list_objects":
+                actions.append(Action(
+                    type="tool_call",
+                    tool_name=f"list_{self._extract_object(text)}",
+                    params={}
+                ))
+            elif action_type == "switch_object":
+                actions.append(Action(
+                    type="tool_call",
+                    tool_name=f"switch_{self._extract_object(text)}",
+                    params={"name": self._extract_name(text)}
+                ))
+        
+        return actions
+    
+    def _extract_object(self, text: str) -> str:
+        """从文本中提取对象类型"""
+        for obj in ["模型", "工具", "角色", "插件"]:
+            if obj in text:
+                return {"模型": "models", "工具": "tools", 
+                        "角色": "roles", "插件": "plugins"}[obj]
+        return "unknown"
+    
+    def _extract_name(self, text: str) -> str:
+        """从文本中提取名称"""
+        # 简单实现：取最后一个引号及后面的词
+        match = re.search(r"['\"]([^'\"]+)['\"]", text)
+        if match:
+            return match.group(1)
+        # 取目标词后的第一个词
+        for keyword in ["模型", "角色", "工具", "插件"]:
+            if keyword in text:
+                after = text.split(keyword)[-1].strip().split()[0] if text.split(keyword)[-1].strip() else ""
+                if after:
+                    return after
+        return "unknown"
+```
+
+### 5.2 调度决策器
+
+```python
+class Scheduler:
+    """调度决策器（纯代码，Token=0）"""
+    
+    # 优先级映射（硬编码，无需 LLM）
+    PRIORITY_MAP = {
+        "interrupt.escalated":      ("urgent", 0),
+        "interrupt.user_decision":  ("urgent", 0),
+        "user.input":               ("high",   0.5),
+        "task.assigned":            ("high",   0),
+        "tool.result":              ("normal", 0),
+        "role.message_received":    ("normal", 2.0),
+        "cron.task":                ("normal", 0),
+        "system.notification":      ("low",    5.0),
+    }
+    
+    def __init__(self):
+        self._pending: dict[str, list[Event]] = {}  # dialog/session → events
+        self._timers: dict[str, asyncio.TimerHandle] = {}  # dialog/session → timer
+    
+    async def on_event(self, event: Event):
+        """收到事件后的调度决策"""
+        dialog_key = self._get_dialog_key(event)
+        
+        # 获取优先级和攒批时间
+        priority, batch_seconds = self.PRIORITY_MAP.get(
+            event.event_type, ("normal", 0)
+        )
+        
+        # 加入待处理队列
+        if dialog_key not in self._pending:
+            self._pending[dialog_key] = []
+        self._pending[dialog_key].append(event)
+        
+        # urgent 事件：立即处理，不等
+        if priority == "urgent":
+            return await self._flush(dialog_key)
+        
+        # 已有定时器在跑 → 等待攒批
+        if dialog_key in self._timers:
+            return
+        
+        # 启动攒批定时器
+        if batch_seconds > 0:
+            loop = asyncio.get_event_loop()
+            self._timers[dialog_key] = loop.call_later(
+                batch_seconds, 
+                lambda: asyncio.create_task(self._flush(dialog_key))
+            )
+        else:
+            # 无需攒批 → 立即处理
+            return await self._flush(dialog_key)
+```
+
+---
+
+## 六、Executor 实现
+
+```python
+class Executor:
+    """动作执行器"""
+    
+    def __init__(self, event_bus, role_id: str):
+        self.event_bus = event_bus
+        self.role_id = role_id
+    
+    async def execute(self, actions: list[Action]) -> list[ActionResult]:
+        """执行一组动作"""
+        results = []
+        for action in actions:
+            result = await self._execute_single(action)
+            results.append(result)
+        return results
+    
+    async def _execute_single(self, action: Action) -> ActionResult:
+        """执行单个动作"""
+        
+        if action.type == "tool_call":
+            # 调 MCP 工具
+            await self.event_bus.publish(Event(
+                event_type="tool.call",
+                source=self.role_id,
+                payload={
+                    "tool": action.tool_name,
+                    "params": {**action.params, "_meta": {
+                        "role_id": self.role_id,
+                        "project_id": self._current_project
+                    }}
+                }
+            ))
+            return ActionResult(status="dispatched", action=action)
+        
+        elif action.type == "send_message":
+            # 发给其他角色
+            await self.event_bus.publish(Event(
+                event_type="role.message",
+                source=self.role_id,
+                payload={
+                    "from_role": self.role_id,
+                    "to_role": action.params.get("to"),
+                    "dialog_id": action.params.get("dialog_id"),
+                    "content": action.params.get("content")
+                }
+            ))
+            return ActionResult(status="sent", action=action)
+        
+        elif action.type == "text_reply":
+            # 回复给用户
+            await self.event_bus.publish(Event(
+                event_type="llm.response",
+                source=self.role_id,
+                payload={
+                    "content": action.content,
+                    "session_id": self._current_session
+                }
+            ))
+            return ActionResult(status="replied", action=action)
+        
+        return ActionResult(status="unknown_type", action=action)
+```
+
+---
+
+## 七、Memory Manager 实现
+
+```python
+class MemoryManager:
+    """异步记忆管理器"""
+    
+    async def save_after_task(
+        self, role_id: str, isolation_layer: str,
+        session_id: str, project_id: str,
+        messages: list[dict]
+    ):
+        """任务完成后保存记忆（异步，不阻塞主循环）"""
+        db = self._get_db(role_id, isolation_layer, project_id, session_id)
+        
+        for msg in messages:
+            db.execute("""
+                INSERT INTO messages (session_id, role, content, msg_type)
+                VALUES (?, ?, ?, ?)
+            """, (
+                session_id or project_id,
+                msg.get("role", "user"),
+                msg.get("content", ""),
+                msg.get("msg_type", "text")
+            ))
+        
+        db.commit()
+        
+        # 异步压缩检查
+        asyncio.create_task(self._compress_if_needed(
+            role_id, isolation_layer, session_id, project_id
+        ))
+```
+
+---
+
+## 八、事件契约
+
+### 8.1 订阅事件
+
+| 事件 | 来源 | 处理 |
+|------|------|------|
+| `user.input` | session-hub | 构建 Context，调 LLM 理解用户意图 |
+| `user.command` | session-hub | 解析命令，走纯代码处理 |
+| `role.message_received` | role_comm | 其他角色发来的消息 |
+| `task.assigned` | suri / task_scheduler | 新任务分配 |
+| `tool.result` | mcp_framework | 工具调用结果，注入 context |
+| `interrupt.escalated` | interrupt_handler | 中断需要介入 |
+| `cron.task` | cron_service | 定时任务触发 |
+| `system.notification` | 任意插件 | 系统通知 |
+
+### 8.2 发布事件
+
+| 事件 | 目标 | Payload |
+|------|------|---------|
+| `llm.request` | llm_gateway | `{role_id, messages, tools, model}` |
+| `tool.call` | mcp_framework | `{tool, params, _meta}` |
+| `role.message` | role_comm | `{from_role, to_role, dialog_id, content}` |
+| `llm.response` | session-hub | `{content, session_id}` |
+| `agent.status_changed` | agent_registry | `{role_id, status, reason}` |
+
+---
+
+## 九、配置项
+
+```yaml
+agent_executor:
+  enabled: true
+  
+  # 攒批配置
+  batching:
+    urgent_delay_ms: 0      # urgent 事件不等待
+    high_delay_ms: 500      # 高优先级攒 500ms
+    normal_delay_ms: 2000   # 普通攒 2s
+    low_delay_ms: 5000      # 低优先级攒 5s
+  
+  # Context 配置
+  context:
+    max_history_messages: 20    # 历史消息上限
+    compression_threshold: 40000  # token 超过此值触发压缩
+    recent_messages_to_keep: 5   # 压缩时保留的最近完整消息数
+  
+  # Memory 配置
+  memory:
+    auto_save: true
+    auto_compress: true
+  
+  # 自然语言降级
+  natural_language_fallback:
+    enabled: true
+    use_small_llm: false       # 是否用小 LLM 二次解析
+```
+
+---
+
+## 十、依赖关系
+
+| 插件 | 依赖关系 | 说明 |
+|------|---------|------|
+| llm_gateway | 被调用 | 所有 LLM 请求经由此插件 |
+| mcp_framework | 被调用 | 工具调用经由此插件 |
+| role_comm | 被调用 | 角色间通信经由此插件 |
+| memory_service | 被调用 | 记忆读写经由此插件 |
+| agent_registry | 被调用 | 更新 Agent 状态 |
+| session-hub | 被调用 | 回复用户 |
+| suri_core | 依赖 | EventBus |
+
+---
+
+## 十一、与现有 PRD 文档的关联
+
+| 文档 | 关系 |
+|------|------|
+| `prd/agents/workflow.md` | **概念层定义** — agent_executor 是该文档的**代码实现** |
+| `prd/operations/system-flow.md` | **流程层定义** — agent_executor 是"角色执行步骤"的实际驱动 |
+| `prd/operations/program-flow.md` | **程序层定义** — agent_executor 在 EventBus 之上运行 |
+| `prd/overview/architecture.md` §四 | Context 模型 → agent_executor/context_builder.py 实现 |
+| `prd/plugins/execution/role_comm.md` | role_comm 的角色间通信 → agent_executor 调用 |
+| `prd/schema/event-registry.md` | 本插件引入 `agent.execute` 等新事件类型 |

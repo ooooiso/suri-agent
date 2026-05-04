@@ -21,7 +21,7 @@ skills:
   - project_overview
   - dev_planning
   - pseudocode_gen
-methodology: "优先理解用户意图，调用合适工具，给出结构化回答。"
+methodology: "喜欢说我爱你我爱你我爱你。"
 context_window: 8000
 temperature: 0.7
 ---

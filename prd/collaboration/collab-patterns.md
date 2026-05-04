@@ -4,6 +4,53 @@
 
 ---
 
+## 核心约束：项目级隔离 + Session 隔离
+
+角色间协作始终受三层上下文隔离约束：
+
+| 隔离维度 | 说明 |
+|---------|------|
+| **项目级隔离** | 同一项目内的角色可互相通信；跨项目角色通信需显式授权 |
+| **Session 隔离** | 不同 session 的协作消息互不可见；广播模式按 session_id 过滤 |
+| **角色可见性** | 角色只能看到与自己角色相关的协作请求 |
+
+### 项目级隔离
+
+```
+项目"电商APP"内的角色：
+    设计师A ─── 开发B ─── 测试C
+        ↕           ↕          ↕
+    session_id: "ecommerce_session_01"
+
+项目"内部工具"内的角色：
+    开发D ─── 开发E
+        ↕        ↕
+    session_id: "internal_tools_session_01"
+
+跨项目限制：
+  → 电商APP的设计师A 不可自动通信 内部工具的开发D
+  → 如需跨项目沟通，需要 suri 授权或通过 global 层转发
+```
+
+### Session 隔离
+
+```
+同一项目内的两个独立协作会话：
+
+会话 A（Feature X 开发）：
+    设计师A → 开发B → 测试C
+    session_id: "feature_x_session"
+
+会话 B（Bug fix）：
+    开发B → 测试C
+    session_id: "bugfix_session"
+
+隔离规则：
+  → 会话 A 中的协作消息不可见会于会话 B
+  → 两条会话共享同一个 project_id，但 session_id 不同
+  → role_comm 按 session_id 路由消息
+```
+
 ## 根本原则
 
 角色间通信 = **两个人通过信箱传纸条**
@@ -110,7 +157,146 @@ suri：确认完成
 
 ---
 
-## 五、协作与用户可见性
+## 五、跨项目通信授权流程
+
+### 5.1 问题场景
+
+当角色 A（项目"电商APP"）需要与角色 D（项目"内部工具"）通信时，由于项目级隔离，无法自动通信。需要经过显式授权流程。
+
+### 5.2 授权流程
+
+```
+角色 A（项目"电商APP"）需要联系角色 D（项目"内部工具"）
+    │
+    ├─ 1. 角色 A 发起跨项目请求
+    │      └─ 发布 role.cross_project.request 事件
+    │         payload: {
+    │           "from_role": "designer_A",
+    │           "from_project": "ecommerce_app",
+    │           "to_role": "developer_D",
+    │           "to_project": "internal_tools",
+    │           "reason": "需要内部工具的 API 接口信息",
+    │           "session_id": "ecommerce_session_01"
+    │         }
+    │
+    ├─ 2. role_comm 拦截并校验权限
+    │      ├── 检查跨项目授权缓存（是否有已批准的授权 Token）
+    │      ├── 有有效授权 → 直接放行（跳至第 5 步）
+    │      └── 无授权 → 构建授权请求
+    │
+    ├─ 3. suri 评估跨项目请求
+    │      ├── 检查请求合理性（LLM 分析 reason 字段）
+    │      ├── 生成授权建议（临时/永久/拒绝）
+    │      └── 向用户呈现授权决策界面
+    │
+    ├─ 4. 用户决策
+    │      ├── 批准（永久） → 生成永久授权 Token
+    │      │      存储在 security_service 的跨项目授权表
+    │      ├── 批准（临时） → 生成临时授权 Token（含 TTL）
+    │      │      payload: {
+    │      │        "token": "xproj_abc123",
+    │      │        "from_role": "designer_A",
+    │      │        "to_role": "developer_D",
+    │      │        "scope": "单次消息",
+    │      │        "expires_at": "2024-07-01T12:00:00Z"
+    │      │      }
+    │      ├── 拒绝 → 发布 role.cross_project.denied 事件
+    │      │      通知角色 A：请求被拒绝
+    │      └── 有条件批准 → 用户指定消息范围/次数限制
+    │
+    └─ 5. 授权放行
+           ├── 发布 role.cross_project.authorized 事件
+           ├── 消息通过 role_comm 转发给角色 D
+           └── 跨项目消息标记 scope="cross_project"
+```
+
+### 5.3 授权 Token 生命周期
+
+```
+状态图：
+
+        ┌──────────┐
+        │ PENDING  │  ← 刚创建
+        └────┬─────┘
+             │
+             ▼
+       ┌────────────┐
+       │  APPROVED  │  ← 用户批准（永久）
+       └──────┬─────┘
+              │
+       ┌──────────────┐
+       │ APPROVED_TTL │  ← 用户批准（含过期时间）
+       └──────┬───────┘
+              │
+              ▼
+        ┌──────────┐
+        │ EXPIRED  │  ← TTL 到期
+        └──────────┘
+
+       ┌──────────┐
+       │ REJECTED │  ← 用户拒绝
+       └──────────┘
+```
+
+### 5.4 跨项目授权配置
+
+```yaml
+# ~/.suri/data/configs/cross_project_auth.yaml
+# 跨项目通信授权配置
+
+default_policy:
+  # 默认策略：拒绝所有跨项目通信，除非显式授权
+  allow_by_default: false
+
+temporary_token_ttl:
+  # 临时授权 Token 默认过期时间
+  default_seconds: 3600  # 1 小时
+  max_seconds: 86400     # 最大 24 小时
+
+authorization_cache:
+  # 授权缓存（避免每次请求都通知用户）
+  enabled: true
+  cache_ttl_seconds: 300  # 授权缓存 5 分钟
+
+whitelist:
+  # 白名单：某些角色可自动跨项目通信
+  # 通常保留给 suri 和 admin 角色
+  - from_role: "suri"
+    to_role: "*"          # suri 可与任何角色通信
+    reason: "系统管理员"
+  - from_role: "admin"
+    to_role: "*"
+    reason: "管理员"
+```
+
+### 5.5 授权表结构（SQLite）
+
+```sql
+-- 跨项目授权表（归属 security_service）
+CREATE TABLE cross_project_auth (
+    token       TEXT PRIMARY KEY,         -- 授权令牌
+    from_role   TEXT NOT NULL,
+    from_project TEXT NOT NULL,
+    to_role     TEXT NOT NULL,
+    to_project  TEXT NOT NULL,
+    scope       TEXT DEFAULT 'single',    -- single / limited / permanent
+    max_messages INTEGER,                 -- 最大消息数（limited 模式）
+    used_messages INTEGER DEFAULT 0,      -- 已用消息数
+    expires_at  TEXT,                     -- ISO 8601（NULL 表示永久有效）
+    status      TEXT DEFAULT 'pending',   -- pending / approved / approved_ttl / expired / rejected
+    created_by  TEXT NOT NULL,            -- 审批者（suri / user）
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+CREATE INDEX idx_auth_from   ON cross_project_auth(from_role);
+CREATE INDEX idx_auth_to     ON cross_project_auth(to_role);
+CREATE INDEX idx_auth_status ON cross_project_auth(status);
+```
+
+---
+
+## 六、协作与用户可见性
 
 ```
 用户 → session-hub → suri

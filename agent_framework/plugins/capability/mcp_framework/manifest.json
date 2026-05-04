@@ -1,0 +1,18 @@
+{
+  "manifest_version": "1.0",
+  "name": "mcp_framework",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "capability",
+  "description": "MCP 服务框架 — 系统唯一的工具注册中心，统一管理文件系统、命令执行、网络搜索等工具",
+  "author": "",
+  "permissions": ["system.*", "tool.call"],
+  "event_subscriptions": ["tool.call", "system.started", "system.config_changed"],
+  "dependencies": ["suri_core", "security_service"],
+  "config_schema": {
+    "services_dir": "services/",
+    "auto_register": true,
+    "remote_servers": []
+  }
+}

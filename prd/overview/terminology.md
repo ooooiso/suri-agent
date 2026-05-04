@@ -1,6 +1,7 @@
 # 术语表
 
 > suri-agent 系统使用的核心术语定义。
+> **本文档为所有交叉引用的唯一源头。**
 
 ---
 
@@ -8,47 +9,67 @@
 
 | 术语 | 定义 |
 |------|------|
-| **suri** | 主人 Agent（第一性智能体），系统唯一的 `core` 类型角色。按自己的 Soul 处理业务、自我进化、调度角色、维护系统 |
-| **角色（Agent）** | 独立智能体，拥有 Soul/技能/记忆/学习能力。每个角色通过 skill 文件定义能力，通过 role_comm 通信 |
+| **suri** | 主人 Agent（第一性智能体），系统唯一的 `core` 类型角色 |
+| **角色（Agent）** | 独立智能体，拥有 Soul/技能/记忆/学习能力 |
 | **角色类型** | `core`（唯一，suri）/ `worker`（工作）/ `project_director`（项目总监）/ `admin`（管理） |
-| **角色状态** | `created` / `ready` / `busy` / `blocked` / `upgrading` / `archived` / `deleted`。提示：`upgrading` 状态角色 **可继续学习**（role_learner 异步分析不阻塞升级流程） |
+| **角色状态** | `created` / `ready` / `busy` / `blocked` / `upgrading` / `archived` / `deleted` |
+
+## 三层数据分离 ⭐（所有文档以此处定义为准）
+
+> 系统所有涉及"角色数据存储、Git 管理、路径规则"的描述，**统一引用此节**，禁止在各文档中独立重复描述。
+
+| 层级 | 目录 | Git 管理 | 内容 | 说明 |
+|------|------|---------|------|------|
+| **角色定义** | `roles/{role_id}/` | ✅ 是 | soul.md, meta.json, skills/, memories/insights/ | 代码般的资产，随 Git 迁移 |
+| **运行时数据** | `~/.suri/runtime/roles/{role_id}/` | ❌ 否 | adhoc/, projects/, global/role.db | 会话/项目记忆，首次启动自动重建 |
+| **系统配置** | `~/.suri/` | ❌ 否 | config.json, logs/, suri.db | API Key 等敏感信息 |
+
+**跨文档引用约定**：
+- 所有提及"角色数据存储"的地方 → 统一写"详见 terminology.md 三层数据分离"
+- 所有提及"Git 版本控制"的地方 → 统一写"参见 terminology.md 三层数据分离"
+- 禁止在 design-principles.md / program-flow.md / startup.md / directory-structure.md 中**独立重复**三层数据分离的定义
+
+## 三清单体系 ⭐（所有文档以此处定义为准）
+
+> Role Registry / Plugin Registry / Tool Registry 的"三清单"，所有交叉引用统一定义于此。
+
+| 清单 | 维护者 | 存储位置 | 广播事件 |
+|------|--------|---------|---------|
+| **Role Registry** | `role_manager` | `~/.suri/data/registries/role_registry.json` | `role.registered` / `role.updated` / `role.deprecated` |
+| **Plugin Registry** | `plugin_manager` | `~/.suri/data/registries/plugin_registry.json` | `plugin.registered` / `plugin.updated` / `plugin.deprecated` |
+| **Tool Registry** | `mcp_framework` | `~/.suri/data/registries/tool_registry.json` | `tool.registered` / `tool.updated` / `tool.deprecated` |
+
+**三清单审计**：所有三清单变更必须经过 security_service 拦截检查，见 security_service.md 三清单审计节。
 
 ## 核心配置文件
 
 | 术语 | 定义 |
 |------|------|
-| **Soul** | 角色的自我定义文件，决定职责边界、行为偏好、工作方法论 |
-| **Skill** | 角色的能力原子单元。通过 skill 文件定义，可被 role_learner 检测、自学自增 |
-| **Memory** | 角色的经验积累。SQLite 持久化，含 session 记忆和长期 insights |
-| **Manifest** | 插件的声明文件。定义插件名称、版本、api_version、事件合约、热更新级别 |
+| **Soul** | 角色的自我定义文件，YAML frontmatter + Markdown body，存储在 `roles/{role_id}/soul.md` |
+| **Skill** | 角色的能力原子单元。通过 skill 文件定义，可被 role_learner 检测、自学自增。包含 `tool_mappings` 字段 |
+| **Memory** | 角色的经验积累。SQLite 持久化，按上下文类型分为 Ad-hoc/Project/Global 三层 |
+| **Manifest** | 插件的声明文件。定义名称、版本、api_version、事件合约 |
+| **_meta** | 工具调用中的上下文元数据，包含 `role_id, project_id, task_id, session_id`。由 security_service 的 meta_validator 校验 |
 
 ## 系统机制
 
 | 术语 | 定义 |
 |------|------|
-| **EventBus** | 事件总线，系统的通信中枢。异步发布/订阅模式，所有实体仅通过事件通信 |
-| **PluginManager** | 插件管理器，负责插件扫描、加载、初始化、生命周期管理 |
+| **EventBus** | 事件总线，系统的通信中枢。异步发布/订阅模式 |
+| **PluginManager** | 插件管理器，负责插件扫描、加载、生命周期管理 |
 | **suri_core** | 内核插件，系统第一个插件。自举注册 EventBus 和 PluginManager |
-| **热更新** | 运行时无需重启即可更新插件/Soul/技能。支持 hot/warm/cold 三级 |
-| **四维协同进化** | Skill/Soul/Plugin/Tool 四个维度独立进化，通过事件广播互相感知 |
+| **上下文隔离** | 角色上下文分为 Ad-hoc / Project / Global 三层，严格隔离防混淆 |
+| **切换快照** | 角色切换项目时保存的 context_snapshot，包含当前任务摘要和关键事实 |
+| **审批令牌** | security_service 生成的临时许可，用于高危操作确认。超时 300 秒自动失效 |
+| **热更新** | 运行时无需重启即可更新配置/数据/代码。支持 L1(配置)/L2(数据)/L3(代码) 三级 |
 
-## 插件
+## 插件热更新级别
 
-| 术语 | 定义 |
-|------|------|
-| **插件（Plugin）** | 被动能力提供者，响应事件或角色调用。通过 manifest.json 声明暴露的能力 |
-| **热更新级别** | `hot`（即时代码热替换）/ `warm`（等待事务完成再替换）/ `cold`（需重启） |
-| **事件合约** | 插件声明 publish 和 subscribe 的事件类型，保证系统可预测性 |
-| **插件暴露声明** | manifest.json 中 exposes 字段，声明插件暴露的 events/tools/commands/apis |
-
-## 协作
-
-| 术语 | 定义 |
-|------|------|
-| **项目总监** | `project_director` 类型角色，负责项目内多 worker 调度协作 |
-| **角色通信** | 角色间通过 `role_comm` 插件的点对点/广播消息交换信息 |
-| **冲突解决** | 多个角色对同一资源/skill 的竞争处理机制 |
-| **工作区** | `works/` 目录，项目的工作空间，含项目文档和产出 |
+| 级别 | 名称 | 范围 | 是否重启 |
+|------|------|------|---------|
+| **L1** | 配置热更新 | 配置文件、模板、关键词 | ❌ 不需要 |
+| **L2** | 数据热更新 | 三清单、角色定义、工具注册 | ❌ 不需要 |
+| **L3** | 代码热更新 | 插件代码变更 | ⚠️ 视情况 |
 
 ## 进化
 
@@ -56,27 +77,9 @@
 |------|------|
 | **技能进化** | Skill 文件版本递进（v1.0 → v1.1），role_learner 检测重复模式后建议 |
 | **Soul 进化** | Soul 文件被 suri 更新，变更角色职责边界/行为偏好 |
-| **插件进化** | 插件通过 self-analysis → 自修改流程来更新自己的能力 |
-| **工具进化** | MCP 工具注册/更新/废弃，自动更新 tool_descriptions.yaml |
+| **插件进化** | 插件通过 self-analysis → 自修改流程更新自己的能力 |
+| **工具进化** | suri 通过自然语言对话维护开发工具，注册/更新/废弃后自动广播通知 |
 | **协同通知** | 某个维度变更后，通过事件广播通知所有相关方 |
-
-## 模式
-
-| 术语 | 定义 |
-|------|------|
-| **首次模式** | 系统首次检测到某个模式的 skill，创建 skill 文件 |
-| **确认模式** | 用户确认角色学习的技能建议，激活新技能 |
-| **精炼模式** | 用户对现有 skill 进行干预，手动修改参数/步骤 |
-| **场景模式** | 预定义的典型业务流程模板 |
-
-## 兼容性
-
-| 术语 | 定义 |
-|------|------|
-| **兼容** | Skill 可无影响地替换版本 |
-| **中断性变更** | Skill 变更后需项目组全体验证 |
-| **不兼容** | Skill 变更后角色无法正常工作，需回滚 |
-| **事件级别** | `info` / `warning` / `error` / `critical` 四级通知 |
 
 ## 其他
 

@@ -16,6 +16,7 @@
 - 运行时修改 `config.json` 后，通过 `/reload` 或事件触发重新加载
 - 插件无需重启即可获取新配置
 - 变更事件广播：`system.config_changed`
+- 三清单联动：配置变更通知三清单刷新，确保角色/插件/工具配置一致性
 
 ### 3. 角色与插件配置扫描
 - 扫描 `role/` 目录下所有 Soul 文件（YAML frontmatter + Markdown）

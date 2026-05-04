@@ -528,7 +528,77 @@ EventBus 和 Context Manager 自身开销 < 1ms
 
 ---
 
-## 七、迭代规划
+## 七、健康追踪机制
+
+> 代码实现：`llm_gateway/plugin.py` 的 `get_health()` 和 `_health` 实例属性。
+
+### 7.1 健康数据模型
+
+```python
+@dataclass
+class ProviderHealth:
+    provider_id: str               # 厂商 ID，如 "deepseek"
+    last_success_timestamp: float  # 最近一次成功调用的 Unix 时间戳
+    last_error_timestamp: float    # 最近一次失败调用的 Unix 时间戳
+    last_error_message: str        # 最近一次错误消息
+    consecutive_failures: int      # 连续失败次数
+    total_calls: int               # 总调用次数
+    success_calls: int             # 成功次数
+```
+
+### 7.2 记录时机
+
+每次 LLM API 调用完成后更新 `_health`：
+
+| 场景 | 更新字段 | 说明 |
+|------|---------|------|
+| 调用成功 | `last_success_timestamp = now()`<br>`success_calls += 1`<br>`consecutive_failures = 0` | 正常完成 |
+| 调用失败 | `last_error_timestamp = now()`<br>`consecutive_failures += 1`<br>`total_calls += 1`<br>记录 `last_error_message` | API 返回错误/网络超时 |
+| 首次启动（未调用过） | 属性保持默认值 | `last_success = 0`, `last_error = 0` |
+
+### 7.3 对外接口
+
+```python
+class LLMGatewayPlugin:
+    def get_health(self) -> Dict[str, ProviderHealth]:
+        """返回所有厂商的健康状态快照。
+        
+        返回格式: { provider_id: ProviderHealth }
+        每次调用返回最新数据（非缓存）。
+        """
+```
+
+### 7.4 消费者
+
+| 消费者 | 用途 | 需要字段 |
+|--------|------|---------|
+| `formatter.py::format_model_status()` | 渲染 LLM 模型状态面板时，决定厂商显示在线/异常/待机 | `last_success_timestamp`, `last_error_timestamp` (当前足够) |
+| `CLI /models` 命令 | 展示每个厂商的在线状态 | 同上 |
+| `session_hub.py` | 生成系统状态报告（迭代 2 的 `/sessions` 面板） | 全部字段，特别是 `total_calls`, `consecutive_failures` |
+| `hot-reload 降级决策` | 连续失败超过阈值时自动降级到备选模型（迭代 2） | `consecutive_failures` (待实现) |
+
+### 7.5 状态推导规则
+
+```
+从 ProviderHealth 推导显示状态：
+
+last_success == 0 and last_error == 0
+  → ⏳ 待机（有 Key，但从未发起过请求）
+
+last_success > last_error
+  → ✅ 在线（最近一次调用成功）
+
+last_success < last_error
+  → ⚠️ 异常（最近一次调用失败）
+  → 连续 5 次以上失败可触发降级
+
+未配置 API Key
+  → ❌ 离线（由调用方检测 api_keys 字段决定）
+```
+
+---
+
+## 八、迭代规划
 
 | 迭代 | 内容 | 状态 |
 |------|------|------|

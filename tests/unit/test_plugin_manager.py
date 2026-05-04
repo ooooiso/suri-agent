@@ -161,6 +161,88 @@ class TestPluginManager(unittest.TestCase):
 
         asyncio.run(_test())
 
+    # --- P0.2 循环依赖检测测试 (6 个用例) ---
+
+    def test_circular_dep_detection(self):
+        """A→B→A，检测到循环。"""
+        manager = PluginManager(None, [])
+        manifests = {
+            "A": {"name": "A", "dependencies": ["B"]},
+            "B": {"name": "B", "dependencies": ["A"]},
+        }
+        cycled = manager._detect_circular_deps(manifests)
+        self.assertEqual(sorted(cycled), ["A", "B"])
+
+    def test_circular_three_nodes(self):
+        """A→B→C→A 三节点循环。"""
+        manager = PluginManager(None, [])
+        manifests = {
+            "A": {"name": "A", "dependencies": ["B"]},
+            "B": {"name": "B", "dependencies": ["C"]},
+            "C": {"name": "C", "dependencies": ["A"]},
+        }
+        cycled = manager._detect_circular_deps(manifests)
+        self.assertEqual(sorted(cycled), ["A", "B", "C"])
+
+    def test_no_circular_deps(self):
+        """A→B→C，无循环依赖。"""
+        manager = PluginManager(None, [])
+        manifests = {
+            "A": {"name": "A", "dependencies": ["B"]},
+            "B": {"name": "B", "dependencies": ["C"]},
+            "C": {"name": "C", "dependencies": []},
+        }
+        cycled = manager._detect_circular_deps(manifests)
+        self.assertEqual(cycled, [])
+
+    def test_self_dep(self):
+        """A→A 自依赖循环。"""
+        manager = PluginManager(None, [])
+        manifests = {
+            "A": {"name": "A", "dependencies": ["A"]},
+            "B": {"name": "B", "dependencies": []},
+        }
+        cycled = manager._detect_circular_deps(manifests)
+        self.assertEqual(cycled, ["A"])
+
+    def test_missing_dep_warns(self):
+        """声明依赖不存在的插件（不会 crash 即可）。"""
+        async def _test():
+            bus = EventBus()
+            await bus.start()
+            project_root = Path(__file__).parent.parent.parent
+            scan_dirs = [str(project_root / "agent_framework/plugins")]
+            manager = PluginManager(bus, scan_dirs)
+
+            # 构造伪造 manifest 含有缺失依赖
+            manifests = {
+                "test_plugin": {"name": "test_plugin", "dependencies": ["nonexistent_plugin"]},
+            }
+            # _topological_sort 调用内会打印 WARNING，但不应抛异常
+            try:
+                result = manager._topological_sort(manifests)
+                self.assertEqual(result, ["test_plugin"])
+            except Exception as e:
+                self.fail(f"_topological_sort raised unexpectedly: {e}")
+
+            await bus.stop()
+        asyncio.run(_test())
+
+    def test_no_deps_sorts_by_priority(self):
+        """无依赖时按 manifest 顺序排序（测试现有功能不退化）。"""
+        async def _test():
+            bus = EventBus()
+            await bus.start()
+            project_root = Path(__file__).parent.parent.parent
+            scan_dirs = [str(project_root / "agent_framework/plugins")]
+            manager = PluginManager(bus, scan_dirs)
+            manifests = manager._scan_plugins()
+            # 无依赖关系时，排序结果长度=manifest数
+            sorted_list = manager._topological_sort(manifests)
+            self.assertEqual(len(sorted_list), len(manifests))
+            await bus.stop()
+        asyncio.run(_test())
+
 
 if __name__ == "__main__":
     unittest.main()

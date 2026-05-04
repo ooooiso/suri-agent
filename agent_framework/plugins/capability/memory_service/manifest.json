@@ -1,0 +1,17 @@
+{
+  "manifest_version": "1.0",
+  "plugin_id": "memory_service",
+  "name": "memory_service",
+  "version": "1.0.0",
+  "type": "service",
+  "description": "角色级独立记忆存储插件，为每个角色提供 SQLite 数据库 + 文本记忆文件管理",
+  "entry": "plugin.py",
+  "dependencies": ["suri_core"],
+  "permissions": [
+    "read:runtime",
+    "write:runtime"
+  ],
+  "commands": [
+    {"name": "memory", "usage": "/memory", "desc": "查看/管理记忆存储", "args": [{"name": "操作", "required": false, "desc": "操作类型"}]}
+  ]
+}

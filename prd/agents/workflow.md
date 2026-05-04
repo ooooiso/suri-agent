@@ -42,7 +42,116 @@
 
 ---
 
-## 2. 角色分析并分解任务
+## 2. 角色执行引擎 — Agent Loop
+
+> 角色的"大脑执行回路"由 `agent_executor` 插件驱动（详见 `prd/plugins/execution/agent_executor.md`）。
+> 以下是对 workflow.md 概念层的补充：明确 Agent 如何接收事件 → 调 LLM → 执行动作。
+
+### 2.1 Agent Loop 核心流程
+
+```
+角色接收事件（从 EventBus）
+    │
+    ├── user.input ────── 用户消息（自然语言）
+    ├── role.message_received ── 其他角色消息（自然语言）
+    ├── task.assigned ──── suri 或系统分配的任务
+    └── interrupt.* ───── 中断事件
+    │
+    ▼
+Agent Loop 启动（agent_executor 驱动）
+    │
+    ├── Step 1: 调度决策（纯代码，Token=0）
+    │   ├── urgent → 立即调 LLM
+    │   ├── high → 攒 500ms 再调
+    │   └── normal → 攒 2s 再调
+    │
+    ├── Step 2: 构建五层 Context
+    │   ├── system_layer = soul.md + 技能 + tool_desc
+    │   ├── session_layer = 项目/会话上下文
+    │   ├── task_layer = 当前任务状态
+    │   ├── history_layer = 最近 20 条对话
+    │   └── memory_layer = 按需检索的记忆片段
+    │
+    ├── Step 3: 调 LLM（通过 llm_gateway）
+    │   ├── 携带完整 Context + 工具定义
+    │   └── 输出：function calling / tool_call / 自然语言
+    │
+    ├── Step 4: 解析 LLM 输出
+    │   ├── function calling → 结构化执行
+    │   ├── tool_call → 调 mcp_framework
+    │   ├── 自然语言降级 → 意图识别
+    │   └── 纯文本回复 → 直接输出给用户
+    │
+    ├── Step 5: 执行动作
+    │   ├── 调工具 → tool.call 事件
+    │   ├── 发消息 → role.message 事件
+    │   ├── 回用户 → llm.response 事件
+    │   └── 调插件 → 对插件事
+    │
+    ├── Step 6: 循环决策
+    │   ├── 还有步骤？→ 回到 Step 2
+    │   └── 全部完成？→ 保存记忆 + 等待下一事件
+    │
+    └── Step 7: 记忆管理（异步）
+        ├── 保存到对应隔离层 DB
+        └── 触发 role_learner
+```
+
+### 2.2 所有通信是自然语言
+
+```
+用户 ↔ 角色：全自然语言
+  "帮我换个模型" → 角色 LLM 理解 → 调工具 → "已切换到 Claude"
+
+角色 ↔ 角色：全自然语言（通过 role_comm）
+  "开发，按钮改成蓝色" → role.message → 开发 LLM 理解 → 改代码 → 回复
+
+角色 ↔ 工具：自然语言 → function calling 转换
+  LLM 输出 "让我查一下模型列表" + tool_call(list_models)
+```
+
+### 2.3 TaskPlan 数据结构
+
+`TaskPlan` 是 task_planner 输出的核心数据结构，定义了任务的完整执行计划：
+
+```python
+@dataclass
+class TaskStep:
+    """任务步骤"""
+    step_id: str                          # 唯一标识，如 "step-001"
+    name: str                             # 步骤名称，如 "需求分析"
+    description: str                      # 步骤详细描述
+    step_type: StepType                   # llm_call / tool_call / skill_call / memory_op / logic
+    depends_on: list[str]                 # 依赖的 step_id 列表
+    timeout_seconds: int = 300            # 步骤超时时间
+    retry_count: int = 0                  # 已重试次数
+    max_retries: int = 3                  # 最大重试次数
+    status: StepStatus = "pending"        # pending / running / completed / failed / blocked / cancelled
+
+@dataclass
+class TaskPlan:
+    """任务执行计划"""
+    plan_id: str                          # 计划唯一标识
+    task_id: str                          # 关联的任务 ID
+    created_by: str                       # 创建者 role_id
+    created_at: str                       # ISO 8601
+    steps: list[TaskStep]                 # 步骤列表
+    parallel_groups: list[list[str]] = None  # 可并行执行的步骤分组
+    context: Context = None               # 关联上下文（见 architecture.md §7）
+    metadata: dict = None                 # 扩展元数据
+```
+
+### 2.2 步骤类型（StepType）
+
+| 类型 | 说明 | 执行方式 |
+|------|------|---------|
+| `llm_call` | 调用大模型 | 通过 llm_gateway |
+| `tool_call` | 调用 MCP 工具 | 通过 mcp_framework |
+| `skill_call` | 调用角色自身技能 | 角色自行执行 |
+| `memory_op` | 记忆读写操作 | 通过 memory_service |
+| `logic` | 纯逻辑处理 | 角色自行执行 |
+
+### 2.3 分析流程
 
 ```
 角色分析接收到的任务

@@ -61,7 +61,7 @@ if __name__ == "__main__":
 **关键约束**：EventBus 只做消息路由，不解析消息内容，不决定消息去向。路由目标由订阅者自己匹配。
 
 ### 2. 插件管理器（PluginManager）
-- 扫描路径：`agent_framework/plugins/` + `~/.suri/runtime/plugins/`
+- 扫描路径：`agent_framework/plugins/`（递归搜索所有子目录）
 - 生命周期：扫描 → 加载 → 初始化 → 注册 → 运行 → 暂停 → 卸载 → 清理
 - 依赖排序加载（拓扑排序）
   - 构建反向图：`graph[name]` = 依赖 name 的节点集合
@@ -216,7 +216,9 @@ suri_core:
     worker_count: 4
     persist: true
   plugin_manager:
-    scan_dirs: ["agent_framework/plugins/"]
+    scan_dirs:
+      - "agent_framework/plugins/"
+      - "~/.suri/runtime/agent_framework/plugins/"
     auto_load_core: true
     heartbeat_interval: 5
     heartbeat_timeout: 30
@@ -236,8 +238,91 @@ suri_core:
   "permissions": ["system.*", "plugin.*"],
   "event_subscriptions": ["system.shutdown", "plugin.upgrade_proposed"],
   "runtime_mutable": false,
-  "self_registration": true
+  "self_registration": true,
+  "operations": ["start", "stop", "restart"]
 }
+```
+
+### Manifest 字段规范
+
+所有插件 manifest.json 必须包含以下字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `name` | string | 是 | 插件唯一标识 ID，小写字母+下划线 |
+| `version` | string | 是 | 语义化版本号，如 "1.0.0" |
+| `type` | string | 是 | 插件类型: core / service / capability / execution / access / extension |
+| `description` | string | 是 | 一句话简介，CLI 启动面板直接展示，建议 10-15 字 |
+| `permissions` | string[] | 是 | 权限声明，如 ["system.*"] |
+| `event_subscriptions` | string[] | 否 | 订阅的事件类型列表 |
+| `published_events` | string[] | 否 | 发布的事件类型列表 |
+| `dependencies` | string[] | 否 | 依赖的插件 ID 列表 |
+| `config_schema` | object | 否 | 配置项的 JSON Schema，详情面板第 6 区块展示 |
+| `commands` | object[] | 否 | 插件提供的 CLI 命令，自动注册到 COMMAND_REGISTRY |
+| `operations` | string[] | 否 | 该插件支持的生命周期操作，默认 ["start", "stop", "restart"] |
+| `runtime_mutable` | boolean | 否 | 代码是否可运行时自修改，默认 false |
+| `self_registration` | boolean | 否 | 是否自注册到 PluginManager，默认 false |
+
+### `operations` 字段详解
+
+`operations` 枚举该插件支持哪些生命周期操作。CLI 详情面板的「操作」区块将根据此字段展示可用命令。
+
+| operation | 含义 | CLI 展示 | 默认支持 |
+|-----------|------|----------|---------|
+| `start` | 启动插件 | `/plugin start <N>` | ✅ 所有插件 |
+| `stop` | 暂停插件 | `/plugin stop <N>` | ✅ 所有插件 |
+| `restart` | 重启插件 | `/plugin restart <N>` | ✅ 所有插件 |
+| `upgrade` | 升级插件版本 | `/plugin upgrade <N>` | ❌ 需显式声明 |
+| `remove` | 卸载删除插件 | `/plugin remove <N>` | ❌ 需显式声明 |
+
+示例：
+
+```json
+// 普通服务插件，不支持升级和卸载
+{ "operations": ["start", "stop", "restart"] }
+
+// 可升级的能力插件
+{ "operations": ["start", "stop", "restart", "upgrade"] }
+
+// 完全可控的核心插件
+{ "operations": ["start", "stop", "restart", "upgrade", "remove"] }
+```
+
+### 插件生命周期钩子
+
+插件实现类必须实现以下方法，对应 manifest 中的 `operations`：
+
+```python
+class PluginInterface:
+    async def init(self, event_bus, config): ...
+    async def start(self):                     # 对应 start 操作
+    async def stop(self):                      # 对应 stop 操作  
+    async def restart(self):                   # 对应 restart 操作
+    async def upgrade(self, target_version):   # 对应 upgrade 操作（可选）
+    async def remove(self):                    # 对应 remove 操作（可选）
+    async def cleanup(self): ...
+```
+
+### CLI 面板操作渲染规则
+
+详情面板第 7 区块「操作」根据 `operations` 动态渲染：
+
+```
+operations = ["start", "stop", "restart"]
+        │
+        ├─→  ── 操作 ──
+             /plugin start 3      启动插件
+             /plugin stop 3       暂停插件
+             /plugin restart 3    重启插件
+
+operations = ["start", "stop", "restart", "upgrade", "remove"]
+        │
+        ├─→  ── 操作 ──
+             /plugin start 3      启动插件
+             /plugin stop 3       暂停插件
+             /plugin restart 3    重启插件
+             /plugin upgrade 3    升级插件
+             /plugin remove 3     删除插件
 ```
 
 ## 依赖关系

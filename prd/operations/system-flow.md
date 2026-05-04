@@ -68,9 +68,84 @@ suri 角色接收请求
 
 ---
 
-## 2. 单角色任务执行流
+## 2. Agent Loop — 角色自主执行流
 
-**场景**：suri 将任务分配给某个角色后，该角色的执行流程
+> **Agent Loop** 是角色自主行为核心引擎，由 `agent_executor` 插件实现（详见 `prd/plugins/execution/agent_executor.md`）。
+> 以下流程描述了角色如何自主接收事件、决策、调 LLM、执行动作。
+
+### 2.1 核心循环
+
+```
+Agent Loop（每个角色一个实例，由 agent_executor 管理）
+    │
+    ├── Step 1: 事件接收（非阻塞，等待外部事件）
+    │   ├── user.input ── 用户消息
+    │   ├── role.message_received ── 其他角色消息
+    │   ├── task.assigned ── suri/系统分配任务
+    │   ├── tool.result ── 工具调用结果
+    │   └── interrupt.* ── 中断事件
+    │
+    ├── Step 2: 调度决策（纯代码，Token=0）
+    │   ├── 判断优先级：urgent > high > normal > low
+    │   ├── 攒批策略：urgent=0ms, high=500ms, normal=2s, low=5s
+    │   └── 决策结果：立即处理 / 等待攒批 / 继续已有任务
+    │
+    ├── Step 3: 构建 Context（五层结构）
+    │   ├── system_layer = soul.md + 技能 + tool_desc
+    │   ├── session_layer = 项目/会话上下文
+    │   ├── task_layer = 当前任务状态
+    │   ├── history_layer = 最近 20 条对话
+    │   └── memory_layer = 按需注入的记忆片段
+    │
+    ├── Step 4: 调 LLM（通过 llm_gateway）
+    │   ├── 发布 llm.request 事件
+    │   ├── 携带完整 Context + 工具定义列表
+    │   └── 等待 llm.response 返回
+    │
+    ├── Step 5: 解析 LLM 输出
+    │   ├── function calling（首选）→ 结构化调用
+    │   ├── tool_call → 工具执行
+    │   ├── 自然语言降级 → 意图识别
+    │   └── 纯文本回复 → 直接输出
+    │
+    ├── Step 6: 执行动作
+    │   ├── tool_call → mcp_framework
+    │   ├── 发消息 → role_comm
+    │   ├── 回用户 → session-hub
+    │   └── 调插件 → 对应插件事件
+    │
+    ├── Step 7: 循环决策（纯代码）
+    │   ├── 还有未完成步骤？→ 回到 Step 3
+    │   ├── 等待外部结果？→ 回到 Step 1
+    │   └── 全部完成？→ 异步保存记忆
+    │
+    └── Step 8: 记忆管理（异步）
+        ├── 保存对话到对应隔离层 DB
+        ├── 检查是否需要 Context 压缩
+        └── 触发 role_learner（可选）
+```
+
+### 2.2 自然语言驱动的全部通信
+
+```
+用户 ↔ 角色：全部自然语言
+  ┌─ 用户："帮我换个模型，Claude 3.5 更好用"
+  └─ 角色 LLM 理解意图 → 调工具 list_models + switch_model
+      → 回用户："好的，已切换到 Claude 3.5 Sonnet"
+
+角色 ↔ 角色：全部自然语言
+  ┌─ 设计师："开发，登录页按钮颜色改成蓝色，谢谢"
+  └─ 开发 LLM 理解意图 → 执行代码修改
+      → 回设计师："已改好，按钮从绿色改为蓝色，你看看效果"
+
+角色 → 工具：自然语言 → function calling
+  ┌─ 角色 LLM 回复："让我查一下当前模型列表"
+  └─ 输出 function calling → agent_executor 解析 → mcp_framework 执行
+```
+
+### 2.3 完整流程实现（补充原有流程说明）
+
+**场景**：suri 将任务分配给某个角色后，该角色的 Agent Loop 驱动完整执行
 
 ```
 suri 分配任务给角色
@@ -320,12 +395,16 @@ interrupt_handler 介入
 
 **场景**：需要多个角色协作完成的复杂项目
 
+> **角色类型说明**：`project_director` 是一种预定义的角色类型，由 suri 在创建项目组时动态创建。它不绑定特定技能模板，而是根据项目需求由 suri 生成 Soul 定义（详见 §3 角色创建流程）。其核心职责是任务拆分、进度跟踪、冲突协调和结果汇总。
+
 ```
 suri 分析需求 → 识别需要多个角色
     │
     ▼
 suri 创建项目组
   ├─ 指定项目总监（project_director 角色）
+  │   └─ 由 suri 调用 llm_gateway 生成 Soul 草案
+  │   └─ 核心职责：任务拆分、进度跟踪、冲突协调
   └─ 分配各参与角色
     │
     ▼

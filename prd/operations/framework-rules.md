@@ -146,48 +146,65 @@ suri 接收并分析
 
 ## 三、数据存储
 
-### 存储分层
+> ⚠️ **重要**：角色数据分为两大类，分别管理，不可混淆。
 
-| 层级 | 位置 | 用途 |
-|------|------|------|
-| 用户数据 | `~/.suri/data/` | SQLite 数据库、配置文件、升级报告 |
-| 运行时数据 | `~/.suri/runtime/` | 角色实例、动态插件、会话缓存 |
-| 临时数据 | `/tmp/suri-agent/` | 解压文件、临时缓存 |
-| 备份数据 | `~/.suri/backup/` | 代码变更快照 |
+### 3.1 角色定义数据（入 Git，在 `roles/{id}/` 下）
 
-### 角色数据存储
-
-**核心设计**：suri-agent 是"末日程序"，角色数据（Soul 定义、记忆、技能、产出）比代码更宝贵。因此角色全部数据统一存放在代码仓库的 `roles/` 目录下，纳入 Git 版本控制。
+suri-agent 是"末日程序"，角色 **定义**（Soul、技能描述、元数据）比代码更宝贵，必须纳入 Git 版本控制。
 
 ```
-roles/（Git 管理，包含全部角色数据，git clone 即可恢复）
-  ├── soul.md                 # 角色自我定义（可被 suri 更新）
-  ├── skills/                 # 角色技能（可自学自增）
+roles/{role_id}/（Git 管理）
+  ├── soul.md                 # 角色自我定义（系统 prompt 核心）
+  ├── skills/                 # 角色技能定义（可自学自增）
   │   └── {skill_name}_v{major}.{minor}.json
-  ├── memories/               # 角色记忆与洞察
-  │   ├── role.db (SQLite)
-  │   └── insights/
-  │       └── {timestamp}_{type}.md
-  ├── scripts/                # 角色自定义脚本
-  ├── reference/              # 角色参考资料
-  ├── output/                 # 角色产出文件
-  └── meta.json               # 角色元数据（类型/创建时间/版本）
+  ├── meta.json               # 角色元数据（role_type/version/创建时间）
+  └── reference/              # 角色参考资料（可选，角色自行维护）
 ```
 
-**核心角色 suri** 的数据位于 `roles/suri/`。
+**注意**：角色运行时数据（记忆、SQLite DB）不在此目录，入 Git 的仅为角色**定义**文件。
 
-**`~/.suri/`** 仅存放系统级敏感配置和运行时日志，不纳入 Git：
+### 3.2 角色运行时数据（不入 Git，在 `~/.suri/runtime/roles/` 下）
+
+运行时数据涉及执行上下文切换、会话缓存、记忆库，时效性强且体积大，不适合 Git 管理。
+
+```
+~/.suri/runtime/roles/{role_id}/
+  ├── adhoc/                  # 临时会话数据（7天自动清理）
+  │   └── {session_id}/
+  │       └── role.db         # 会话记忆库
+  ├── projects/               # 项目工作数据
+  │   └── {project_id}/
+  │       └── role.db         # 项目记忆库 + context_snapshots
+  ├── global/
+  │   └── role.db             # 全局记忆库
+  ├── context/
+  │   └── snapshot.json       # 角色上下文快照（用于休眠/恢复）
+  └── output/                 # 角色产出文件（可选入 Git）
+```
+
+### 3.3 系统数据与运行时
+
 ```
 ~/.suri/
   ├── config.json             # API Key、模型选择等敏感配置（不进入 Git）
-  ├── data/                   # 中央数据（SQLite 数据库、升级报告）
-  │   ├── suri.db             # 中央 SQLite 数据库（事件记录、审计日志）
+  ├── data/                   # 中央数据
+  │   ├── suri.db             # 中央 SQLite（事件记录、审计日志、三清单缓存）
   │   └── upgrade_reports/    # 升级报告存档
   └── runtime/
       ├── logs/               # 运行时日志
       ├── sessions/           # 会话缓存
       └── agent_framework/plugins/   # 动态插件运行时数据
 ```
+
+### 存储分层总览
+
+| 层级 | 位置 | 用途 | 入 Git |
+|------|------|------|--------|
+| 角色定义 | `roles/{id}/` | soul.md / skills / meta.json | ✅ 是 |
+| 角色运行时 | `~/.suri/runtime/roles/{id}/` | 记忆库 DB / context_snapshots / output | ❌ 否 |
+| 系统数据 | `~/.suri/data/` | 中央 SQLite、升级报告 | ❌ 否 |
+| 临时数据 | `/tmp/suri-agent/` | 解压文件、临时缓存 | ❌ 否 |
+| 备份数据 | `~/.suri/backup/` | 代码变更快照 | ❌ 否 |
 
 ### SQLite 表结构
 
@@ -229,7 +246,7 @@ bootstrap()：
 扫描 → 加载 → 初始化 → 注册 → 运行 → 暂停 → 卸载 → 清理
 ```
 
-- **扫描**：plugin_manager 读取 agent_framework/plugins/ 和 `~/.suri/runtime/agent_framework/plugins/`
+- **扫描**：plugin_manager 递归扫描 agent_framework/plugins/ 所有子目录 + `~/.suri/runtime/agent_framework/plugins/`
 - **加载**：import 插件模块
 - **初始化**：调用插件 init()，传入 event_bus 和配置
 - **注册**：插件声明订阅的事件类型（含 manifest.json 暴露声明）
@@ -286,7 +303,7 @@ bootstrap()：
 
 ## 七、错误处理
 
-### 错误码规范
+### 7.1 错误码规范
 
 | 错误码段 | 类别 | 说明 |
 |----------|------|------|
@@ -300,6 +317,93 @@ bootstrap()：
 | `4100-4199` | 升级 | upgrade_manager |
 | `5000-5099` | 接入 | access |
 | `9000-9099` | 通用 | 跨插件通用错误 |
+
+### 7.2 完整错误码注册表
+
+#### 系统级（1000-1099）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 1001 | `EVENT_BUS_FULL` | EventBus 队列已满，丢弃 LOW 事件 | ✅ | `error.system` |
+| 1002 | `PLUGIN_LOAD_FAILED` | 插件加载失败（语法错误/依赖缺失） | ❌ | `error.plugin` |
+| 1003 | `PLUGIN_INIT_FAILED` | 插件初始化失败 | ❌ | `error.plugin` |
+| 1004 | `CIRCULAR_DEP_DETECTED` | 插件间检测到循环依赖 | ❌ | `error.system` |
+| 1005 | `PLUGIN_TIMEOUT` | 插件事件响应超时 | ✅ | `error.plugin` |
+| 1006 | `SYSTEM_SHUTDOWN_ERROR` | 系统关闭流程异常 | ❌ | `error.system` |
+
+#### 基础服务（1100-1199）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 1101 | `CONFIG_NOT_FOUND` | 配置文件缺失 | ✅ | `error.plugin` |
+| 1102 | `SECURITY_PATH_DENIED` | 文件沙箱路径越界访问 | ❌ | `error.security` |
+| 1103 | `APPROVAL_EXPIRED` | 审批令牌已超时 | ✅ | `error.security` |
+| 1104 | `APPROVAL_REJECTED` | 审批被用户拒绝 | ❌ | `error.security` |
+| 1105 | `LOG_WRITE_FAILED` | 日志写入失败 | ✅ | `error.system` |
+
+#### 任务调度（2000-2099）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 2001 | `TASK_PLAN_FAILED` | 任务分解失败 | ✅ | `task.failed` |
+| 2002 | `TASK_STEP_TIMEOUT` | 任务步骤执行超时 | ✅ | `task.timeout` |
+| 2003 | `TASK_MAX_RETRIES` | 任务已达最大重试次数 | ❌ | `task.failed` |
+| 2004 | `TASK_DEP_MISSING` | 任务依赖未满足 | ✅ | `task.failed` |
+| 2005 | `TASK_PRIORITY_INVALID` | 优先级参数不合法 | ❌ | `task.failed` |
+
+#### Agent 相关（2100-2199）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 2101 | `AGENT_CREATE_FAILED` | Agent 创建失败 | ❌ | `agent.blocked` |
+| 2102 | `AGENT_MAX_CONCURRENT` | 并发 Agent 数已达上限（100） | ✅ | `error.system` |
+| 2103 | `INTERRUPT_UNRESOLVED` | 中断未能自动解决，需要人工介入 | ✅ | `interrupt.escalated` |
+
+#### 通信（2200-2299）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 2201 | `ROLE_NOT_FOUND` | 目标角色不存在 | ❌ | `role.message_rejected` |
+| 2202 | `SESSION_INACTIVE` | 会话已过期或不活跃 | ✅ | `role.message_rejected` |
+| 2203 | `MSG_PERMISSION_DENIED` | 角色无权向目标角色发消息 | ❌ | `error.security` |
+
+#### LLM 网关（3000-3099）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 3001 | `LLM_RATE_LIMITED` | 模型请求被限流 | ✅ | `llm.error` |
+| 3002 | `LLM_BUDGET_EXCEEDED` | 模型预算超限 | ✅ | `llm.error` |
+| 3003 | `LLM_TIMEOUT` | LLM 请求超时 | ✅ | `llm.error` |
+| 3004 | `LLM_MODEL_UNAVAILABLE` | 模型不可用（API 降级/维护） | ✅ | `llm.error` |
+| 3005 | `LLM_CONTEXT_OVERFLOW` | 上下文超过模型限制 | ✅ | `llm.error` |
+| 3006 | `LLM_INVALID_RESPONSE` | LLM 返回格式异常 | ✅ | `llm.error` |
+
+#### 角色管理（4000-4099）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 4001 | `ROLE_CREATE_FAILED` | 角色创建失败（soul.md 模板无效） | ❌ | `error.plugin` |
+| 4002 | `ROLE_SOUL_INVALID` | Soul 文件格式校验失败 | ✅ | `role.created` |
+| 4003 | `ROLE_SKILL_MISSING` | 技能文件缺失 | ✅ | `role.status_changed` |
+| 4004 | `ROLE_LEARN_FAILED` | 角色学习分析失败 | ✅ | `error.plugin` |
+
+#### 接入层（5000-5099）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 5001 | `CHANNEL_AUTH_FAILED` | 接入通道认证失败 | ✅ | `error.plugin` |
+| 5002 | `CHANNEL_RATE_LIMITED` | 通道被限流 | ✅ | `error.plugin` |
+| 5003 | `CHANNEL_TIMEOUT` | 通道响应超时 | ✅ | `error.plugin` |
+| 5004 | `INVALID_COMMAND` | 非法命令格式 | ❌ | `error.plugin` |
+
+#### 通用错误（9000-9099）
+
+| 错误码 | 名称 | 说明 | 是否可恢复 | 发布事件 |
+|--------|------|------|-----------|---------|
+| 9001 | `INTERNAL_ERROR` | 插件内部未分类异常 | ✅ | `error.plugin` |
+| 9002 | `NOT_IMPLEMENTED` | 功能尚未实现 | ❌ | `error.plugin` |
+| 9003 | `INVALID_PARAMS` | 参数校验失败 | ❌ | `error.plugin` |
+| 9004 | `RESOURCE_EXHAUSTED` | 资源耗尽（CPU/内存/磁盘） | ✅ | `error.system` |
 
 ---
 
@@ -392,11 +496,80 @@ bootstrap()：
 4. 子任务失败不影响父 Task（有独立异常处理）
 ```
 
+### 10.5 并发写入锁机制
+
+> 当多个 Agent 同时写入同一文件时，必须通过文件锁串行化写入操作，防止数据损坏。
+
+```python
+import asyncio
+import fcntl
+from pathlib import Path
+
+class FileWriteLock:
+    """
+    基于 fcntl.flock 的跨进程文件写入锁。
+    同一进程内也可通过 asyncio.Lock 做协程级串行化。
+    """
+    
+    _instance = None
+    _coroutine_locks: dict[str, asyncio.Lock] = {}
+    _lock_dir = Path("/tmp/suri-agent/locks/")
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._lock_dir.mkdir(parents=True, exist_ok=True)
+        return cls._instance
+    
+    async def acquire(self, path: str, timeout: float = 10.0) -> bool:
+        """
+        获取文件写入锁。
+        先通过 asyncio.Lock 串行化协程，再通过 fcntl.flock 串行化进程。
+        """
+        lock_key = Path(path).resolve().as_posix()
+        
+        # 协程级锁（同一进程内串行化）
+        if lock_key not in self._coroutine_locks:
+            self._coroutine_locks[lock_key] = asyncio.Lock()
+        
+        coro_lock = self._coroutine_locks[lock_key]
+        
+        try:
+            # 等待协程锁（带超时）
+            await asyncio.wait_for(coro_lock.acquire(), timeout=timeout)
+            
+            # 进程级锁（跨进程串行化）
+            lock_file = self._lock_dir / lock_key.replace("/", "_")
+            fd = lock_file.open("w")
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+            
+            return True
+        except asyncio.TimeoutError:
+            return False
+    
+    async def release(self, path: str) -> None:
+        """释放文件写入锁"""
+        lock_key = Path(path).resolve().as_posix()
+        if lock_key in self._coroutine_locks:
+            self._coroutine_locks[lock_key].release()
+```
+
 ### 10.6 数据写入幂等规则
 
 ```
-1. 所有数据写入操作必须幂等（支持重复执行）
-2. 写操作先检查目标是否存在，存在则跳过或覆盖（按场景）
-3. 文件写使用临时隔离空间 → rename 到目标
-4. SQLite 写通过队列串行化，读通过 WAL 模式并发
+1. 所有数据写入操作必须幂等（支持重复执行，不造成重复效果）
+2. 文件写使用临时隔离空间 → os.replace() 原子重命名到目标
+3. SQLite 写通过队列串行化 + WAL 模式（读并发，写串行）
+4. 并发文件写入须使用 FileWriteLock（见 §10.5），防止 race condition
+5. 写操作前应先检查目标状态（文件是否存在 / DB 记录是否已存在）
+6. Key-Value 写入使用 INSERT OR REPLACE（SQLite）或 conditional put
+7. 追加写入（如日志）不检查存在性，每条记录唯一 ID 保证幂等
+
+并发写入场景示例：
+  Agent A（写 src/main.py）和 Agent B（写同一文件）同时进行：
+    1. FileWriteLock.acquire("src/main.py") → Agent A 获得锁
+    2. Agent A 写入临时文件 → os.replace() 到目标
+    3. FileWriteLock.release("src/main.py")
+    4. Agent B 获得锁 → 读取最新文件 → 写入 → 释放
+    → 保证文件内容不因并发写入而损坏
 ```

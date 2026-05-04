@@ -22,8 +22,12 @@ class PluginInterface(ABC):
         pass
 
     @abstractmethod
-    async def start(self) -> None:
-        """启动插件，标记为就绪状态。"""
+    async def start(self, **kwargs) -> None:
+        """启动插件，标记为就绪状态。
+        
+        Args:
+            **kwargs: 可选的启动参数，如 plugin_manager 注入
+        """
         pass
 
     @abstractmethod

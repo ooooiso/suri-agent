@@ -7,10 +7,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import unittest
 
-from agent_framework.plugins.code_tool.reader import read_file
-from agent_framework.plugins.code_tool.explorer import list_dir
-from agent_framework.plugins.code_tool.search import grep
-from agent_framework.plugins.code_tool.stats import stat_project
+from agent_framework.plugins.execution.code_tool.reader import read_file
+from agent_framework.plugins.execution.code_tool.explorer import list_dir
+from agent_framework.plugins.execution.code_tool.search import grep
+from agent_framework.plugins.execution.code_tool.stats import stat_project
 
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent

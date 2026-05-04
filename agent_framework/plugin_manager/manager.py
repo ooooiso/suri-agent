@@ -120,38 +120,83 @@ class PluginManager:
         await self._event_bus.publish(unload_event)
 
     def _scan_plugins(self) -> Dict[str, Dict[str, Any]]:
-        """扫描插件目录，读取 manifest.json。"""
+        """扫描插件目录，读取 manifest.json。
+        
+        递归扫描所有子目录（支持 capability/、execution/、service/、extension/ 等层级）。
+        """
         manifests = {}
         for scan_dir in self._scan_dirs:
             path = Path(scan_dir)
             if not path.exists():
                 continue
-            for plugin_dir in path.iterdir():
-                if not plugin_dir.is_dir():
-                    continue
-                manifest_file = plugin_dir / "manifest.json"
-                if manifest_file.exists():
-                    try:
-                        with open(manifest_file, "r", encoding="utf-8") as f:
-                            manifest = json.load(f)
-                        manifest["_path"] = str(plugin_dir)
-                        name = manifest.get("name", plugin_dir.name)
-                        manifests[name] = manifest
-                    except Exception as e:
-                        print(f"[PluginManager] Failed to read manifest {manifest_file}: {e}")
+            # 递归遍历所有子目录，查找 manifest.json
+            for manifest_file in path.rglob("manifest.json"):
+                plugin_dir = manifest_file.parent
+                try:
+                    with open(manifest_file, "r", encoding="utf-8") as f:
+                        manifest = json.load(f)
+                    manifest["_path"] = str(plugin_dir)
+                    name = manifest.get("name", plugin_dir.name)
+                    manifests[name] = manifest
+                except Exception as e:
+                    print(f"[PluginManager] Failed to read manifest {manifest_file}: {e}")
         return manifests
+
+    def _detect_circular_deps(self, manifests: Dict[str, Dict[str, Any]]) -> List[str]:
+        """检测循环依赖，返回参与循环的插件名称列表。
+        
+        使用 Kahn 算法检测剩余节点（入度 > 0 的节点即为循环部分）。
+        """
+        from collections import defaultdict, deque
+        
+        graph = defaultdict(set)
+        in_degree = defaultdict(int)
+        
+        for name, manifest in manifests.items():
+            deps = set(manifest.get("dependencies", []))
+            graph[name]
+            for dep in deps:
+                if dep in manifests:
+                    graph[name].add(dep)
+                    in_degree[dep] += 1
+        
+        # Kahn 算法
+        queue = deque([n for n in graph if in_degree[n] == 0])
+        sorted_count = 0
+        while queue:
+            node = queue.popleft()
+            sorted_count += 1
+            for neighbor in graph[node]:
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
+        
+        if sorted_count != len(graph):
+            cycled = [n for n in graph if in_degree[n] > 0]
+            return cycled
+        return []
 
     def _topological_sort(self, manifests: Dict[str, Dict[str, Any]]) -> List[str]:
         """按依赖关系拓扑排序插件加载顺序。
         
-        使用 Kahn 算法：
-        - 入度 = 依赖当前节点的节点数（即被依赖数）
-        - 入度为 0 的节点先加载（没有其他节点依赖它）
-        - 但我们需要的是"先加载被依赖的节点"，所以：
-          - 构建反向图：graph[name] = 依赖 name 的节点集合
-          - 入度 = 当前节点依赖的节点数（即依赖数）
-          - 入度为 0 的节点先加载（不依赖任何其他节点）
+        使用 Kahn 算法，检测循环依赖和缺失依赖并发出警告。
+        
+        返回拓扑排序后的插件名称列表。
         """
+        from collections import deque
+        
+        # Step 1: 检测缺失依赖并警告
+        for name, manifest in manifests.items():
+            deps = set(manifest.get("dependencies", []))
+            for dep in deps:
+                if dep not in manifests:
+                    print(f"[PluginManager] WARNING: {name} depends on {dep}, but {dep} is not installed")
+        
+        # Step 2: 检测循环依赖
+        cycled = self._detect_circular_deps(manifests)
+        if cycled:
+            print(f"[PluginManager] WARNING: Circular dependency detected among: {', '.join(cycled)}")
+        
         # 构建依赖图
         # graph[name] = 依赖 name 的节点集合（反向图）
         graph: Dict[str, Set[str]] = {name: set() for name in manifests}
@@ -168,11 +213,11 @@ class PluginManager:
                     in_degree[name] += 1
         
         # Kahn 算法：先加载入度为 0 的节点（不依赖任何其他节点）
-        queue = [n for n, d in in_degree.items() if d == 0]
+        queue = deque([n for n, d in in_degree.items() if d == 0])
         result = []
         
         while queue:
-            node = queue.pop(0)
+            node = queue.popleft()
             result.append(node)
             # node 已加载，所有依赖 node 的节点入度减 1
             for dependent in graph[node]:
@@ -180,34 +225,66 @@ class PluginManager:
                 if in_degree[dependent] == 0:
                     queue.append(dependent)
         
-        # 处理循环依赖：未排序的插件放到最后
+        # 处理循环依赖节点：强制追加到最后
         for name in manifests:
             if name not in result:
                 result.append(name)
+                print(f"[PluginManager] WARNING: {name} has circular dependency, loaded at end")
         
         return result
 
     def _ast_scan(self, file_path: Path) -> bool:
-        """AST 安全扫描。"""
+        """AST 安全扫描。
+        
+        检查内容：
+        1. 禁止的 API 调用（精确匹配，避免 run_in_executor 被 exec 误杀）
+        2. 禁止的 import 语句
+        3. 禁止的模块导入
+        """
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 source = f.read()
             tree = ast.parse(source)
             
-            forbidden = {
+            # 禁止调用的 API（精确匹配）
+            forbidden_calls = {
                 "socket", "subprocess", "os.system", "os.popen",
                 "os.exec", "os.spawn", "eval", "exec", "compile",
                 "__import__", "ctypes", "imp",
             }
             
+            # 禁止导入的模块
+            forbidden_imports = {
+                "socket", "subprocess", "ctypes", "imp", "pickle",
+            }
+            
             for node in ast.walk(tree):
+                # 检查 API 调用
                 if isinstance(node, ast.Call):
                     func_name = self._get_func_name(node.func)
-                    if func_name and any(
-                    func_name == f or func_name.endswith(f".{f}") for f in forbidden
-                ):
-                        print(f"[AST Scan] Forbidden API detected: {func_name}")
-                        return False
+                    if func_name:
+                        # 精确匹配：func_name == f 或 func_name.endswith(f".{f}")
+                        # 避免 run_in_executor 被 exec 误杀
+                        for f in forbidden_calls:
+                            if func_name == f or func_name.endswith(f".{f}"):
+                                print(f"[AST Scan] ❌ 禁止 API 调用: {func_name} (文件: {file_path.name})")
+                                return False
+                
+                # 检查 import 语句
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        module_name = alias.name.split('.')[0]
+                        if module_name in forbidden_imports:
+                            print(f"[AST Scan] ❌ 禁止导入: {alias.name} (文件: {file_path.name})")
+                            return False
+                
+                if isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        module_top = node.module.split('.')[0]
+                        if module_top in forbidden_imports:
+                            print(f"[AST Scan] ❌ 禁止导入: {node.module} (文件: {file_path.name})")
+                            return False
+            
             return True
         except Exception as e:
             print(f"[AST Scan] Error scanning {file_path}: {e}")

@@ -1,0 +1,52 @@
+{
+  "name": "channel.cli",
+  "channel_type": "cli",
+  "version": "1.0.0",
+  "entry": "plugin.py",
+  "type": "channel",
+  "description": "终端 CLI 交互通道",
+  "dependencies": [],
+  "config_schema": {},
+  "capabilities": {
+    "core": {
+      "text": true,
+      "markdown": true,
+      "commands": true
+    },
+    "media": {
+      "images": false,
+      "video": false,
+      "audio": false,
+      "files": false,
+      "file_max_size_mb": 0
+    },
+    "interaction": {
+      "buttons": false,
+      "forms": false
+    },
+    "streaming": {
+      "text_stream": true,
+      "file_stream": false
+    },
+    "ui": {
+      "rich_ui": false,
+      "notifications": false,
+      "dynamic_content": false,
+      "offline_mode": false,
+      "local_storage": false
+    },
+    "extras": {
+      "clipboard": false,
+      "voice": false,
+      "location": false,
+      "identity": false
+    }
+  },
+  "degrade_chain": {
+    "rich": ["markdown", "text"],
+    "video": ["image", "text"],
+    "file": ["text"],
+    "html": ["text"],
+    "image": ["text"]
+  }
+}

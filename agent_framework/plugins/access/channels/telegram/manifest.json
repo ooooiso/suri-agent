@@ -1,0 +1,49 @@
+{
+  "name": "channel.tg",
+  "channel_type": "telegram",
+  "version": "1.0.0",
+  "entry": "channel.py",
+  "type": "channel",
+  "description": "Telegram Bot 交互通道",
+  "capabilities": {
+    "core": {
+      "text": true,
+      "markdown": true,
+      "commands": true
+    },
+    "media": {
+      "images": true,
+      "video": false,
+      "audio": true,
+      "files": true,
+      "file_max_size_mb": 50
+    },
+    "interaction": {
+      "buttons": true,
+      "forms": false
+    },
+    "streaming": {
+      "text_stream": true,
+      "file_stream": false
+    },
+    "ui": {
+      "rich_ui": false,
+      "notifications": true,
+      "dynamic_content": true,
+      "offline_mode": false,
+      "local_storage": false
+    },
+    "extras": {
+      "clipboard": true,
+      "voice": false,
+      "location": false,
+      "identity": false
+    }
+  },
+  "degrade_chain": {
+    "html": ["markdown", "text"],
+    "video": ["file", "text"],
+    "rich": ["markdown", "text"],
+    "image": ["file", "text"]
+  }
+}

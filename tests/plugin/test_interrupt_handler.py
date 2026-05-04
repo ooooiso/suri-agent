@@ -5,8 +5,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import unittest
-from agent_framework.plugins.interrupt_handler.plugin import InterruptHandlerPlugin
-from agent_framework.plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
+from agent_framework.plugins.execution.interrupt_handler.plugin import InterruptHandlerPlugin
+from agent_framework.plugins.extension.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
 
 
 class TestInterruptHandlerPlugin(TestBase):

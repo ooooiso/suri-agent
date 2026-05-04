@@ -1,0 +1,28 @@
+{
+  "manifest_version": "1.0",
+  "name": "Agent Executor",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "capability",
+  "description": "Agent 执行循环引擎 — 8 步核心循环",
+  "dependencies": ["agent_registry", "llm_gateway", "role_manager"],
+  "load_priority": 30,
+  "permissions": ["agent.*", "task.*", "llm.request"],
+  "event_subscriptions": [
+    "role.context_ready",
+    "task.plan_ready",
+    "agent.created",
+    "user.input",
+    "user.decision",
+    "interrupt.retry_requested",
+    "interrupt.cancelled"
+  ],
+  "config_schema": {
+    "agent_executor": {
+      "max_loop_steps": {"type": "integer", "default": 50},
+      "model": {"type": "string", "default": "deepseek/deepseek-chat"},
+      "default_timeout": {"type": "integer", "default": 120}
+    }
+  }
+}

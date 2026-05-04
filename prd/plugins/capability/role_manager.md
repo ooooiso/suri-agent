@@ -6,36 +6,55 @@
 
 ## 功能需求
 
-### 1. 角色 CRUD
+### 1. 角色 CRUD（含三层目录初始化）
 
 - 创建角色（简化流程）：
   1. 用户输入昵称 + 一句话定义
   2. suri 调用 llm_gateway 丰富 Soul 内容（职责、能力、关键词、方法论）⏸️ 迭代 2 自动丰富
   3. 向用户呈现完整 Soul 草案 ⏸️ 迭代 2
-  4. 用户确认后，自动生成目录结构 + Soul 文件 + 默认配置 ✅
+  4. 用户确认后，自动生成三层目录结构 + Soul 文件 + 默认配置 ✅
+  5. 注册到 Role Registry → 广播 `role.created`
 - 读取角色：解析 Soul 文件（YAML frontmatter + Markdown body）✅
-- 更新角色：修改 Soul 文件（需审批流程）
-- 删除角色：归档到 `_archived/`，保留 30 天后清理
+- 更新角色：修改 Soul 文件（需审批流程）→ 更新 Role Registry → 广播
+- 删除角色：归档到 `_archived/`（保留 30 天后清理）→ 从 Role Registry 移除 → 广播
 
-### 2. 目录初始化
+### 2. 三层目录初始化（Ad-hoc / Project / Global）
 
-创建角色时自动生成：
+根据上下文隔离设计，创建角色时初始化三层存储结构：
+
 ```
 roles/{role_id}/
-├── soul.md               # Soul 文件
-├── memories/
-│   ├── role.db           # SQLite 记忆库
-│   └── insights/         # 学习洞察
-├── skills/               # 角色技能
-├── scripts/              # 角色脚本
+├── soul.md               # Soul 文件（跨所有上下文共享）
+├── skills/               # 角色技能（含 tool_mappings）
 ├── reference/            # 参考资料
-└── output/               # 输出文件
+├── output/               # 输出文件
+│
+├── adhoc/                 # ★ 临时会话（Ad-hoc 层）
+│   └── {session_id}/
+│       └── role.db       # 仅 messages 表
+│
+├── projects/              # ★ 项目级数据（Project 层）
+│   └── {project_id}/
+│       ├── role.db       # 完整记忆系统
+│       ├── context.md    # 项目上下文摘要
+│       └── insights/     # 洞察文件
+│
+├── global/                # ★ 全局记忆（Global 层）
+│   ├── role.db           # 通用事实 + 通用经验
+│   ├── insights/         # 全局洞察
+│   └── memories/         # 全局记忆
+│
+├── scripts/              # 角色脚本
+└── _archived/            # 已删除角色的归档
 ```
 
-### 3. 能力索引
-- 扫描所有角色 Soul 文件，生成角色能力清单
+### 3. 能力索引 + Role Registry（三清单体系）
+- role_manager 负责维护 **Role Registry**（角色清单）
+- 扫描所有角色 Soul 文件，生成能力清单
 - 关键词提取（keywords + capabilities）
 - 角色类型索引（role_type: core/worker/admin/project_director）
+- 角色参与的项目信息索引（active_projects 列表）
+- 注册到三清单体系：`role_registry.register(role_data)` → 广播 `role.registered`
 
 ### 4. 别名管理
 - 支持角色别名映射（旧名 → canonical id）
@@ -46,15 +65,50 @@ roles/{role_id}/
 - 角色创建时可选继承模板
 - 技能索引自动扫描
 
+### 6. 项目切换支持
+- 提供角色切换项目的接口（`switch_project(role_id, from_project, to_project)`）
+- 切换时通过 memory_service 保存 context_snapshot
+- 更新 Role Registry 中角色的 current_project
+- 广播 `project.context_switched` 事件
+
+### 7. 变更广播（所有角色变更通知）
+```python
+# role_manager 作为 Role Registry 的维护者，负责所有角色变更的广播
+role_manager 在以下场景发布事件：
+  role.created       → 新角色诞生
+  role.skill_added   → 技能新增
+  role.skill_updated → 技能升级
+  role.status_changed→ 状态变更
+  role.deleted       → 角色删除
+
+每个事件携带完整 payload：
+{
+  "event_type": "role.skill_added",
+  "role_id": "developer",
+  "payload": {
+    "skill": {
+      "skill_id": "ui_design",
+      "name": "UI界面设计",
+      "tool_mappings": ["figma.*", "llm_gateway.chat"]
+    },
+    "version": "1.2.0"
+  }
+}
+```
+
 ## 接口定义
 
 ### 订阅事件
-- `user.input` → 代理 suri 角色处理：读取 Soul → 组装 system prompt → 发布 `llm.request`
+- `user.input` → （迭代 2 后）发布 `role.context_ready`，不再代理 suri
 - `user.command`（command=create_role / role.list）→ 创建角色或列出角色
 - `role.create` → 直接创建角色（含 name、role_type、identity 等字段）
+- `project.created` → 初始化角色在该项目的存储
+- `project.context_switched` → 更新角色当前项目
 
 ### 发布事件
 - `role.created` / `role.destroyed`
+- `role.skill_added` / `role.skill_updated` / `role.skill_removed`
+- `role.status_changed`
 - `role.skill_invoked`
 
 ## 配置项
@@ -227,12 +281,37 @@ archived → deleted（30天后自动清理）
 
 ## 角色 CRUD
 
-### 创建角色（完整流程）
+### 创建角色（完整流程，含资源检查）
 
 **触发场景**：
 1. 用户主动请求或 `/create_role` 命令
 2. suri 检测到能力缺口（无角色匹配需求）
 3. 现有角色（项目总监）请求创建新角色
+
+**资源检查（创建前）**：
+```
+角色创建前执行资源检查：
+  ├── 1. 检查磁盘空间（~/.suri/runtime/roles/ + roles/ 合计）
+  │       ├── 剩余空间 < 100MB → 阻止创建，提示清理
+  │       └── 空间充足 → 继续
+  │
+  ├── 2. 检查角色 ID 唯一性
+  │       ├── roles/ 下已有同目录 → 阻止创建，提示改名
+  │       └── 不存在 → 继续
+  │
+  ├── 3. 检查角色数量限制
+  │       ├── core 类型已存在 → 阻止创建
+  │       ├── worker/admin/project_director → 不限数量
+  │       └── 通过 → 继续
+  │
+  ├── 4. 检查依赖资源
+  │       ├── 角色所需的 skills 引用的插件是否已加载
+  │       └── 缺失 → warning（角色可创建，但技能部分不可用）
+  │
+  └── 5. 检查权限：发起者是否有创建角色的权限
+          ├── 非 admin/core → 拒绝（仅 suri 或 admin 可创建）
+          └── 通过 → 允许创建
+```
 
 **执行流程**：
 ```

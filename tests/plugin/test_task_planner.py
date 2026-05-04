@@ -5,8 +5,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import unittest
-from agent_framework.plugins.task_planner.plugin import TaskPlannerPlugin
-from agent_framework.plugins.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
+from agent_framework.plugins.execution.task_planner.plugin import TaskPlannerPlugin
+from agent_framework.plugins.extension.test_framework.plugin import EventBusFixture, TestBase, PluginTestHarness
 
 
 class TestTaskPlannerPlugin(TestBase):

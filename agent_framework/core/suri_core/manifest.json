@@ -1,0 +1,20 @@
+{
+  "manifest_version": "1.0",
+  "name": "suri_core",
+  "version": "1.0.0",
+  "entry_point": "plugin.py",
+  "min_suri_version": "1.0.0",
+  "type": "core",
+  "description": "系统内核与健康检查，负责插件生命周期管理与事件总线初始化",
+  "author": "",
+  "permissions": ["system.*", "admin.*"],
+  "event_subscriptions": ["system.*", "plugin.*", "admin.*"],
+  "fs_permissions": {},
+  "runtime_mutable": true,
+  "dependencies": [],
+  "config_schema": {},
+  "commands": [
+    {"name": "help", "usage": "/help", "desc": "显示完整命令帮助", "args": []},
+    {"name": "quit", "usage": "/quit", "desc": "退出 Suri Agent", "args": []}
+  ]
+}

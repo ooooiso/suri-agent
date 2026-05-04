@@ -179,28 +179,36 @@ archived → deleted（30天后自动清理）
 
 ## 八、角色存储
 
-```yaml
-~/.suri/runtime/roles/
-├── suri/                 # 核心角色（不可删除，纳入 Git）
-│   ├── soul.md
-│   ├── skills/
-│   │   └── task_dispatch_v1.0.json
-│   ├── memories/
-│   │   ├── role.db
-│   │   └── insights/
-│   └── meta.json
-├── doc_writer/           # 工作角色
-│   ├── soul.md
-│   ├── skills/
-│   ├── memories/
-│   ├── reference/
-│   └── output/
-├── ecommerce_director/   # 项目总监（项目附带的角色）
-│   ├── soul.md
-│   ├── skills/
-│   └── memories/
-└── _archived/            # 已删除角色的归档
-    └── old_role_01/
+> 角色存储分为**定义数据**（入 Git）和**运行时数据**（不入 Git）两大类，详见 `framework-rules.md §三`。
+
+### 8.1 角色定义数据（入 Git）
+
+角色定义数据在 `roles/{role_id}/` 目录下，纳入 Git 版本控制：
+
+```
+roles/{role_id}/
+  ├── soul.md                 # 角色自我定义（系统 prompt 核心）
+  ├── skills/                 # 角色技能定义
+  │   └── {skill_name}_v{major}.{minor}.json
+  ├── meta.json               # 角色元数据（role_type/version/创建时间）
+  └── reference/              # 角色参考资料（可选）
 ```
 
-**核心角色 suri** 的运行时数据位于 `~/.suri/runtime/roles/suri/`，代码仓库中 `roles/suri/soul.md` 作为初始模板。
+### 8.2 角色运行时数据（不入 Git）
+
+角色运行时数据在 `~/.suri/runtime/roles/{role_id}/` 下，不入 Git：
+
+```
+~/.suri/runtime/roles/{role_id}/
+  ├── adhoc/                  # 临时会话数据（7天自动清理）
+  │   └── {session_id}/
+  │       └── role.db         # 会话记忆库
+  ├── projects/               # 项目工作数据
+  │   └── {project_id}/
+  │       └── role.db         # 项目记忆库
+  ├── global/
+  │   └── role.db             # 全局记忆库
+  ├── context/
+  │   └── snapshot.json       # 角色上下文快照（用于休眠/恢复）
+  └── output/                 # 角色产出文件（可选入 Git）
+```

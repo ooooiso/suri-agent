@@ -270,6 +270,108 @@ CREATE INDEX idx_experiences_timestamp ON experiences(timestamp);
 
 ---
 
+## 三清单注册表（`~/.suri/data/registries/` 与数据库配合）
+
+归属：**role_manager / plugin_manager / mcp_framework**
+
+### `role_registry` — 角色清单
+
+```sql
+CREATE TABLE role_registry (
+    role_id         TEXT PRIMARY KEY,
+    nickname        TEXT NOT NULL,
+    role_type       TEXT NOT NULL,        -- core / worker / admin / project_director
+    version         TEXT NOT NULL,
+    status          TEXT DEFAULT 'active', -- active / deprecated / archived
+    capabilities    TEXT,                  -- JSON array of capability strings
+    keywords        TEXT,                  -- JSON array
+    skills          TEXT,                  -- JSON array of skill_ids
+    current_project TEXT,                  -- 当前项目 ID
+    active_projects TEXT,                  -- JSON array of project_ids
+    soul_path       TEXT,
+    created_at      TEXT,
+    updated_at      TEXT
+);
+
+CREATE INDEX idx_role_registry_type   ON role_registry(role_type);
+CREATE INDEX idx_role_registry_status ON role_registry(status);
+```
+
+### `plugin_registry` — 插件清单
+
+```sql
+CREATE TABLE plugin_registry (
+    plugin_id    TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    version      TEXT NOT NULL,
+    type         TEXT NOT NULL,
+    status       TEXT DEFAULT 'active',  -- active / deprecated / archived
+    api_version  TEXT,
+    manifest     TEXT,                    -- JSON
+    created_at   TEXT,
+    updated_at   TEXT
+);
+
+CREATE INDEX idx_plugin_registry_type   ON plugin_registry(type);
+CREATE INDEX idx_plugin_registry_status ON plugin_registry(status);
+```
+
+### `tool_registry` — 工具清单
+
+```sql
+CREATE TABLE tool_registry (
+    tool_id     TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT,
+    plugin_id   TEXT NOT NULL,
+    schema      TEXT,                     -- JSON schema of tool parameters
+    status      TEXT DEFAULT 'active',    -- active / deprecated / archived
+    created_at  TEXT,
+    updated_at  TEXT
+);
+
+CREATE INDEX idx_tool_registry_plugin ON tool_registry(plugin_id);
+CREATE INDEX idx_tool_registry_status ON tool_registry(status);
+```
+
+### `context_snapshots` — 项目切换快照
+
+归属：**memory_service（配合 role_manager 的 context switching）**
+
+```sql
+CREATE TABLE context_snapshots (
+    snapshot_id   TEXT PRIMARY KEY,
+    role_id       TEXT NOT NULL,
+    from_project  TEXT NOT NULL,
+    to_project    TEXT NOT NULL,
+    summary       TEXT,                   -- 任务摘要
+    key_facts     TEXT,                   -- JSON array
+    pending_tasks TEXT,                   -- JSON array
+    created_at    TEXT NOT NULL
+);
+
+CREATE INDEX idx_snapshots_role   ON context_snapshots(role_id);
+CREATE INDEX idx_snapshots_from  ON context_snapshots(from_project);
+```
+
+### `permissions` — 权限规则表
+
+归属：**security_service**
+
+```sql
+CREATE TABLE permissions (
+    rule_id     TEXT PRIMARY KEY,
+    pattern     TEXT NOT NULL,            -- 路径通配模式，如 "~/.suri/**"
+    permission  TEXT NOT NULL,            -- deny / deny_with_exemption / needs_approval / approved
+    exempt_source TEXT,                   -- 豁免来源插件 ID
+    created_at  TEXT NOT NULL
+);
+
+CREATE INDEX idx_permissions_pattern ON permissions(pattern);
+```
+
+---
+
 ## 已删除的表
 
 | 表名 | 原归属 | 删除原因 |

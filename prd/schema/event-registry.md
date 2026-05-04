@@ -15,7 +15,7 @@
 | `role.*` | 角色通信 | 10（含 role_comm 完整事件链） |
 | `llm.*` | LLM 网关 | 2 |
 | `tool.*` / `error.tool` | MCP 工具 | 2 |
-| `interrupt.*` | 中断处理 | 5 |
+| `interrupt.*` | 中断处理 | 6 |
 | `cron.*` | 定时任务 | 1+ |
 | `security.*` / `error.security` | 安全 | 2 |
 | `plugin.*` / `error.plugin` | 插件 | 2 |
@@ -34,7 +34,9 @@
 | 事件 | 发布者 | 订阅者 | 优先级 | 持久化 |
 |------|--------|--------|--------|--------|
 | `system.started` | suri_core | 所有插件 | CRITICAL | ✅ |
+| `system.ready` | suri_core | 所有插件 | CRITICAL | ✅ |
 | `system.shutdown` | suri_core / access | 所有插件 | CRITICAL | ✅ |
+| `system.shutting_down` | suri_core | 所有插件 | CRITICAL | ✅ |
 | `system.heartbeat` | 所有插件 | suri_core | NORMAL | ❌ |
 | `system.plugin_loaded` | suri_core | log_service / test_framework | NORMAL | ❌ |
 | `system.plugin_unloaded` | suri_core | log_service | NORMAL | ❌ |
@@ -54,10 +56,11 @@
 | 事件 | 发布者 | 订阅者 | 优先级 | 持久化 |
 |------|--------|--------|--------|--------|
 | `task.created` | 角色 / access | task_scheduler / role_learner | HIGH | ✅ |
-| `task.plan_ready` | task_planner | task_scheduler | HIGH | ✅ |
-| `task.planned` | task_planner | 角色 | NORMAL | ❌ |
+| `task.planned` | task_planner | task_scheduler / 角色 | HIGH | ✅ |
+| `task.plan_updated` | task_planner | task_scheduler / 角色 | NORMAL | ❌ |
 | `task.step_ready` | task_planner | task_scheduler | HIGH | ❌ |
-| `task.plan_updated` | task_planner | 角色 | NORMAL | ❌ |
+| `task.step_assigned` | task_scheduler | 角色 | NORMAL | ❌ |
+| `task.step_started` | task_scheduler | 角色 | NORMAL | ❌ |
 | `task.queued` | task_scheduler | log_service | NORMAL | ❌ |
 | `task.started` | task_scheduler | log_service / 角色 | NORMAL | ❌ |
 | `task.completed` | task_scheduler | log_service / role_learner / 角色 / agent_registry | NORMAL | ✅ |
@@ -76,24 +79,43 @@
 | `agent.step_update` | 角色 | agent_registry | NORMAL | ❌ |
 | `agent.block_requested` | interrupt_handler | agent_registry | HIGH | ✅ |
 | `agent.destroy_requested` | 角色 / 系统 | agent_registry | NORMAL | ❌ |
-| `agent.created` | agent_registry | log_service / 角色 | NORMAL | ❌ |
-| `agent.status_changed` | agent_registry | log_service / task_scheduler | NORMAL | ❌ |
-| `agent.completed` | agent_registry | log_service / role_learner / 角色 | NORMAL | ✅ |
-| `agent.blocked` | agent_registry | log_service / interrupt_handler | HIGH | ✅ |
-| `agent.destroyed` | agent_registry | log_service | NORMAL | ❌ |
+| `agent.created` | agent_registry | log_service / 角色 / agent_executor | NORMAL | ❌ |
+| `agent.status_changed` | agent_registry | log_service / task_scheduler / agent_executor | NORMAL | ❌ |
+| `agent.completed` | agent_registry | log_service / role_learner / 角色 / agent_executor | NORMAL | ✅ |
+| `agent.blocked` | agent_registry | log_service / interrupt_handler / agent_executor | HIGH | ✅ |
+| `agent.destroyed` | agent_registry | log_service / agent_executor | NORMAL | ❌ |
+| `agent.execute` | agent_executor | agent_executor（自身循环） | NORMAL | ❌ |
+| `agent.context_built` | agent_executor | log_service | NORMAL | ❌ |
+| `agent.progress` | agent_executor / agent_registry | suri / role_comm | NORMAL | ❌ |
+| `agent.loop_state_changed` | agent_executor | log_service | NORMAL | ❌ |
 
 ### 角色事件
 
-#### 角色生命周期（role_manager）
+#### 角色生命周期（role_manager）— ★ 三清单角色变更广播
 
 | 事件 | 发布者 | 订阅者 | 优先级 | 持久化 |
 |------|--------|--------|--------|--------|
 | `role.create_requested` | access / 角色 | role_manager | HIGH | ✅ |
-| `role.created` | role_manager | 所有角色 / agent_registry | NORMAL | ✅ |
+| `role.created` | role_manager | 所有角色 / agent_registry / suri（评估）| NORMAL | ✅ |
 | `role.destroyed` | role_manager | 所有角色 | NORMAL | ✅ |
+| `role.skill_added` | role_manager | 所有角色 / suri（评估影响）| NORMAL | ✅ |
+| `role.skill_updated` | role_manager | 所有角色 / suri（评估影响）| NORMAL | ✅ |
+| `role.skill_removed` | role_manager | 所有角色 / suri（评估影响）| NORMAL | ✅ |
+| `role.status_changed` | role_manager | agent_registry / suri | NORMAL | ✅ |
 | `role.skill_suggested` | role_learner | role_manager | NORMAL | ✅ |
 | `role.skill_invoked` | role_manager | 角色 | NORMAL | ❌ |
 | `role.context_ready` | role_manager | 目标角色 | HIGH | ✅ |
+| `role.registered` | role_manager | suri / log_service | NORMAL | ✅ |
+
+#### 项目事件（★ 新增 — 用于上下文隔离）
+
+| 事件 | 发布者 | 订阅者 | 优先级 | 持久化 |
+|------|--------|--------|--------|--------|
+| `project.created` | suri | role_manager / 所有角色 | HIGH | ✅ |
+| `project.role_joined` | role_manager | 目标角色 / suri | NORMAL | ✅ |
+| `project.role_left` | role_manager | 目标角色 / suri | NORMAL | ✅ |
+| `project.context_switched` | role_manager / suri | 目标角色 / memory_service | HIGH | ✅ |
+| `project.completed` | suri | 所有参与者 / log_service | NORMAL | ✅ |
 
 #### 角色通信事件链（role_comm — 完整的事件驱动流程）
 
@@ -154,6 +176,7 @@
 | `interrupt.user_decision_needed` | interrupt_handler | access | HIGH | ✅ |
 | `interrupt.cancelled` | interrupt_handler | agent_registry | NORMAL | ❌ |
 | `interrupt.retry_requested` | interrupt_handler | task_scheduler | NORMAL | ❌ |
+| `interrupt.custom_instruction` | interrupt_handler | 角色 | NORMAL | ❌ |
 
 ### 安全事件
 

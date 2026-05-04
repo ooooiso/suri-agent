@@ -1,0 +1,13 @@
+{
+  "plugin_id": "role_comm",
+  "name": "role_comm",
+  "version": "1.0.0",
+  "type": "service",
+  "description": "角色间消息通信服务。提供自然语言消息的点对点/广播能力，按 session_id 隔离对话上下文",
+  "entry": "plugin.py",
+  "dependencies": ["suri_core"],
+  "permissions": [
+    "read:runtime",
+    "write:runtime"
+  ]
+}

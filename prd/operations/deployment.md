@@ -57,7 +57,7 @@ suri-agent/
 │   ├── event_bus/
 │   ├── plugin_manager/
 │   └── suri_core_plugin.py
-├── agent_framework/plugins/   # 插件目录
+├── agent_framework/plugins/   # 插件目录（按类型分子目录）
 │   ├── suri_core/
 │   ├── config_service/
 │   ├── log_service/
@@ -91,7 +91,7 @@ mkdir -p ~/.suri/data ~/.suri/runtime ~/.suri/backup
       "persist": true
     },
     "plugin_manager": {
-      "scan_dirs": ["agent_framework/plugins/"],
+      "scan_dirs": ["agent_framework/plugins/"],     # 递归搜索所有子目录
       "heartbeat_interval": 5,
       "heartbeat_timeout": 30
     }

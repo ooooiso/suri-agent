@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import unittest
 
 from agent_framework.event_bus.bus import EventBus
-from agent_framework.plugins.code_tool.plugin import CodeToolPlugin
+from agent_framework.plugins.execution.code_tool.plugin import CodeToolPlugin
 from agent_framework.shared.utils.event_types import Event, Priority
 
 

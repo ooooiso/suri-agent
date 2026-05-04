@@ -24,39 +24,45 @@ suri = 主人 Agent（role_type=core）
   │   4. 升级自身 — 能力不足时申请增加新技能
   │
   ├── 可扩展能力：通过自身技能学习获得
-  │   （suri 可以通过升级获得更多业务处理技能）
   │
   └── 系统职责：
-      ├── 为角色开发 MCP 工具库
+      ├── 维护三清单（Role/Plugin/Tool Registry）的一致性
+      ├── 接收广播事件 → 评估系统影响 → 决策调整
+      ├── 通过自然语言对话开发维护插件和工具
       ├── 更新角色的 Soul（职责/能力边界）
       ├── 评估和确认角色的技能建议
       ├── 管理插件生命周期
       └── 处理异常和中断
 ```
 
-**suri 的核心能力范围**：
-- ✅ 按自己的 Soul 处理需求（技能范围 = Soul 中的 skills + 可自增部分）
-- ✅ 自我升级：开发插件、增加技能、扩展能力
-- ✅ 帮助角色：开发工具、更新 Soul、评估技能
-- ✅ 调度角色：创建/委派/协调
-- ❌ suri 不执行自己技能范围外的业务任务（→ 调度角色或申请升级）
+### 角色可用所有工具，Soul 约束行为边界
+
+**关键原则**：角色可以使用系统中所有注册的工具，**不做白名单控制**。约束来自角色的 Soul 定义。
+
+```
+设计师角色的 Soul:
+  "我是一名视觉设计师，我的职责是设计用户界面和交互体验。
+  我擅长使用设计类工具，但我不应该直接修改生产代码。"
+
+→ Soul 约束设计师不会调用 code_tool.write_file
+→ 如果调用了，说明有合理的上下文
+→ 如果误调用，security_service 审计日志会记录
+→ suri 可以通过对话提醒"这个操作不符合你的职责"
+```
 
 ### 多 Agent 智能体架构
 
 ```
 每个角色 = 一个独立的 Agent（智能体）
   ├── 独立的 Soul（自我定义、职责、能力边界）
-  ├── 独立的技能（skill 文件，可自学自增）
-  ├── 独立的记忆（memory，SQLite 持久化）
+  ├── 独立的技能（skill 文件，可自学自增，含 tool_mappings 映射工具集）
+  ├── 独立的记忆（三层存储：Ad-hoc/Project/Global）
   ├── 独立的学习能力（role_learner 异步分析）
-  ├── 独立的工具调用（插件/MCP/工具库）
-  └── 独立的通信能力（role_comm，角色间协作）
+  ├── 独立的工具调用（通过 MCP 框架，自动携带 project_id/role_id）
+  └── 独立的通信能力（role_comm，角色间自然语言协作）
 ```
 
-**角色驱动一切**：
-- 所有业务任务由角色的**技能**驱动
-- suri 不直接执行所有任务，只做自己技能范围内的事
-- 当任务超出 suri 能力范围或需要专职角色时 → 创建/调度角色
+> **概念澄清**：在本系统中，"角色（Role）"和"Agent"是同一概念。一个角色 = 一个 Agent = 一个独立的智能体实体。`agent_registry` 插件创建的 Agent 实例是角色的"执行实例"，一个角色在同一个项目中通常只有一个活跃执行实例。详见 `prd/agents/agent-overview.md`。
 
 ---
 
@@ -71,314 +77,147 @@ suri = 主人 Agent（role_type=core）
 └───────┼──────────────┼──────────────┼──────────────────┼──────────┘
         │              │              │                  │
 ┌───────▼──────────────▼──────────────▼──────────────────▼──────────┐
-│                      事件总线 (EventBus)                            │
+│                      💠 事件总线 (EventBus)                         │
 │              异步发布/订阅，所有实体通过事件通信                      │
-└──┬──────────┬──────────┬──────────┬──────────┬────────────────────┘
-   │          │          │          │          │
-   ▼          ▼          ▼          ▼          ▼
-┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────────┐ ┌──────────┐
-│ suri │ │各角色│ │各角色│ │各角色│ │各角色     │ │各角色     │
-│主人  │ │(Agent)│ │(Agent)│ │(Agent)│ │(Agent)   │ │(Agent)   │
-│Agent │ └──────┘ └──────┘ └──────┘ └──────────┘ └──────────┘
-└──────┘
+└───────┬──────────┬──────────┬──────────┬──────────┬───────────────┘
+        │          │          │          │          │
+   ┌────▼────┐     ▼          ▼          ▼          ▼
+   │ suri    │ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+   │ (core)  │ │ 角色A   │ │ 角色B   │ │ 角色C   │ │ ...    │
+   │ 主人Agent│ │(Agent)  │ │(Agent)  │ │(Agent)  │ │(Agent)  │
+   │ ⭐调度权 │ └────────┘ └────────┘ └────────┘ └────────┘
+   └─────────┘
+   (suri 通过 EventBus 发布调度事件，非直接指令)
 ```
 
 ### 核心分层说明
 
-| 层级 | 组件 | 职责 |
-|------|------|------|
-| **内核层** | suri_core | 系统内核，自举注册，协调 EventBus 和 PluginManager |
-| **服务层** | config_service, log_service, security_service | 基础服务：配置/日志/安全 |
-| **执行层** | task_scheduler, task_planner, agent_registry, interrupt_handler, role_comm, code_tool | 任务编排、Agent 管理、通信 |
-| **能力层** | llm_gateway, memory_service, role_manager, role_learner, mcp_framework, upgrade_manager | 角色核心能力：LLM/记忆/学习/工具 |
-| **接入层** | access | 多通道接入（CLI/Telegram） |
-| **扩展层** | test_framework, cron_service, hooks_service, doc_sync | 扩展能力 |
-
-详见 [operations/directory-structure.md](../operations/directory-structure.md) 和 `prd/plugins/README.md`。
+| 层级 | 组件数 | 职责 |
+|------|--------|------|
+| **内核层** (1) | suri_core | 系统内核，自举注册，协调 EventBus 和 PluginManager |
+| **服务层** (3) | config_service, log_service, security_service | 基础服务：配置/日志/安全 |
+| **执行层** (7) | task_scheduler, task_planner, agent_registry, interrupt_handler, role_comm, code_tool, **agent_executor** | 任务编排、Agent 管理、通信、代码工具、**Agent 执行引擎** |
+| **能力层** (6) | llm_gateway, memory_service, role_manager, role_learner, mcp_framework, upgrade_manager | LLM/记忆/角色管理/学习/工具/升级 |
+| **接入层** (1) | access | 多通道接入（CLI/Telegram/WebSocket） |
+| **扩展层** (5) | test_framework, cron_service, hooks_service, doc_sync, monitor | 测试/定时/钩子/文档同步/监控 |
 
 ---
 
-## 三、角色与插件的关系
+## 三、三清单体系（核心设计）
+
+> 系统有三个核心清单，实时记录所有身份、能力、状态。变更后广播通知相关方。
+
+### 3.1 三清单总览
 
 ```
-角色 (Role) = 智能体（独立的 Agent）
-  ├── 拥有 Soul 文件 → 自我定义、职责、能力边界
-  ├── 拥有技能 → 通过技能调用插件/MCP 工具
-  ├── 拥有记忆 → 经验积累、模式识别
-  ├── 拥有学习能力 → 自学、自增技能
-  └── 拥有通信能力 → 与其他角色协作
-
-插件 (Plugin) = 能力提供者
-  ├── 提供工具/服务 → 被角色调用
-  ├── 提供事件处理 → 被 EventBus 调度
-  ├── 插件自身也是 Agent → 可以学习、更新自己的能力
-  └── 不绑定特定角色 → 可被任何角色使用
+┌────────────────────────────────────────────────────────────────┐
+│                 S U R I  三 清 单 体 系                         │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ ① 角色清单 (Role Registry)                               │   │
+│  │  用途：记录所有角色的身份、技能、状态                      │   │
+│  │  维护者：role_manager 插件                               │   │
+│  │  存储：SQLite + 内存缓存                                 │   │
+│  │  关键字段：role_id, role_type, skills(含tool_mappings),  │   │
+│  │            status, active_projects                       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ ② 插件清单 (Plugin Registry)                             │   │
+│  │  用途：记录所有插件的身份、版本、能力、状态                │   │
+│  │  维护者：plugin_manager 插件                             │   │
+│  │  存储：SQLite + 内存缓存                                 │   │
+│  │  关键字段：plugin_id, version, type, tools_provided,    │   │
+│  │            status, call_count, error_rate               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ ③ 工具清单 (Tool Registry)                               │   │
+│  │  用途：记录所有工具的注册信息、调用统计、状态              │   │
+│  │  维护者：mcp_framework 插件                              │   │
+│  │  存储：SQLite + 内存缓存                                 │   │
+│  │  关键字段：tool_id, source_plugin, call_count, status,  │   │
+│  │            permission_level                              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-### suri 角色的特殊地位
+### 3.2 变更广播机制
 
 ```
-suri 是系统唯一的"主人 Agent"（role_type=core）
-  ├── 不可删除
-  ├── 有自己的 Soul（决定其行为边界和偏好）
-  ├── 有自己的技能（持续学习中）
-  ├── 负责处理自己技能范围内的用户需求
-  ├── 负责自我升级：开发插件/增加技能/MCP 工具
-  ├── 负责调度其他角色（需要时）
-  └── 负责维护系统
+任何变更发生后（角色/工具/插件）：
+  1. 更新对应清单
+  2. 发布变更事件（带完整 payload）
+  3. suri 接收事件 → 评估是否需要调整系统策略
+  4. 所有角色接收事件 → 评估是否需要调整自身行为
+  5. 用户可见的通知（通过 access 层）
 ```
 
-### 用户请求处理核心流程
+> **完整事件注册表见 `prd/schema/event-registry.md`**，覆盖 12 大类 60+ 事件。
 
-```
-用户: "帮我写一份产品文档"
-    │
-    ▼
-suri 接收需求
-    │
-    ├── 判断：在我的技能范围内吗？
-    │   ├── 能 → suri 自己调用工具处理
-    │   └── 不能 →
-    │       │
-    │       ▼
-    │   判断：是否有合适角色？
-    │       │
-    │       ├── 有 → 分配给该角色
-    │       │
-    │       └── 没有 →
-    │           │
-    │           ▼
-    │       suri 问用户："当前没有角色能处理，
-    │       是否创建一个'文档撰写员'角色？"
-    │           │
-    │           ▼
-    │       用户确认 →
-    │       suri 调用 role_manager 创建角色
-    │       suri 为新角色配置初始工具
-    │       新角色就绪，开始工作
-    │
-    └── 特殊情况：suri 也不确定怎么处理
-        │
-        ▼
-    suri 问用户："这个需求超出我当前能力范围，
-    是否允许我增加新技能来处理？"
+### 3.3 角色清单项目信息
+
+角色清单中的每条记录包含角色参与的项目信息：
+
+```python
+role_registry.get_role("developer") = {
+    "role_id": "developer",
+    "role_type": "worker",
+    "current_project": "internal_tools",  # 当前活跃项目
+    "active_projects": [                  # 参与的所有项目
+        {
+            "project_id": "ecommerce_app",
+            "joined_at": "2026-04-01",
+            "last_active": "2026-05-03",
+            "task_count": 45
+        },
+        {
+            "project_id": "internal_tools",
+            "joined_at": "2026-04-15",
+            "last_active": "2026-05-04",
+            "task_count": 23
+        }
+    ],
+    "status": "ready"                    # 角色状态，详见 agent-overview.md
+}
 ```
 
 ---
 
-## 四、系统组成
+## 四、上下文与存储体系（双维度）
 
-### 4.1 内核层 (1个)
+> 本系统从**两个维度**管理上下文与数据，两者互不冲突：
+> - **存储维度**（三层隔离）：角色数据的物理存储位置隔离
+> - **运行时维度**（Context 结构）：LLM 调用时构建的上下文结构
 
-| 组件 | 位置 | 职责 |
-|------|------|------|
-| **suri_core** | `agent_framework/core/suri_core/` | 内核核心，自举注册，协调 EventBus 和 PluginManager |
+### 4.1 存储维度 — 三层隔离
 
-### 4.2 基础服务层 (3个)
-
-| 插件 | 位置 | 职责 |
-|------|------|------|
-| **config_service** | `agent_framework/plugins/config_service/` | 配置管理，持久化，热加载 |
-| **log_service** | `agent_framework/plugins/log_service/` | 日志记录，归档，查询 |
-| **security_service** | `agent_framework/plugins/security_service/` | 权限校验，操作审计，代码扫描 |
-
-### 4.3 执行层 (6个)
-
-| 插件 | 位置 | 职责 |
-|------|------|------|
-| **task_scheduler** | `agent_framework/plugins/task_scheduler/` | 任务调度，步骤分发，并发控制，超时重试 |
-| **task_planner** | `agent_framework/plugins/task_planner/` | 任务分解，模板匹配，LLM 辅助规划 |
-| **agent_registry** | `agent_framework/plugins/agent_registry/` | Agent 生命周期管理，状态跟踪，进度查询 |
-| **interrupt_handler** | `agent_framework/plugins/interrupt_handler/` | 中断分类，自动重试，用户决策 |
-| **role_comm** | `agent_framework/plugins/role_comm/` | 角色间点对点/广播消息，持久化队列 |
-| **code_tool** | `agent_framework/plugins/code_tool/` | 文件读写，搜索，统计，规则提供 |
-
-### 4.4 能力层 (6个)
-
-| 插件 | 位置 | 职责 |
-|------|------|------|
-| **llm_gateway** | `agent_framework/plugins/llm_gateway/` | LLM 厂商路由，模型切换，流式响应 |
-| **role_manager** | `agent_framework/plugins/role_manager/` | 角色 CRUD，Soul 解析，能力索引，会话上下文 |
-| **memory_service** | `agent_framework/plugins/memory_service/` | 角色级 SQLite 记忆存储，经验管理 |
-| **role_learner** | `agent_framework/plugins/role_learner/` | 角色自学习，经验提取，技能检测 |
-| **mcp_framework** | `agent_framework/plugins/mcp_framework/` | MCP 协议，工具注册发现，内置服务 |
-| **upgrade_manager** | `agent_framework/plugins/upgrade_manager/` | 升级报告状态机，备份回滚，闭环验证 |
-
-### 4.5 接入层 (1个)
-
-| 插件 | 位置 | 职责 |
-|------|------|------|
-| **access** | `agent_framework/plugins/access/` | 多通道接入（CLI/Telegram），消息路由，命令解析 |
-
-### 4.6 扩展层 (5个)
-
-| 插件 | 位置 | 职责 |
-|------|------|------|
-| **test_framework** | `agent_framework/plugins/test_framework/` | 测试基础设施 |
-| **cron_service** | `agent_framework/plugins/cron_service/` | 定时任务调度（可选依赖） |
-| **hooks_service** | `agent_framework/plugins/hooks_service/` | 文件变更钩子，事件拦截 |
-| **doc_sync** | `agent_framework/plugins/doc_sync/` | 文档同步，代码变更监控 |
-| **monitor** | `agent_framework/plugins/monitor/` | 系统监控 |
-
----
-
-## 五、四维协同进化（核心补充）
-
-> 系统中 Skill / Soul / Plugin / Tool 四个维度可独立进化，通过事件总线互相感知。
-
-详见 [evolution/coevolution.md](evolution/coevolution.md)。
-
-**核心协同规则**：
-1. 每个维度独立进化，变更后广播事件
-2. 接收方自主决策响应方式
-3. 运行时 context 切换有策略（默认继续旧 Context）
-4. system prompt 在 llm.request 前刷新
-5. 所有变更须用户确认，但确认后自动完成通知链
-
-
-## 六、角色通信模型
-
-> 角色间通信 = **自然语言消息 + 事件驱动**。两个角色通过"信箱"传纸条，纸条本身不思考。
-
-### 6.1 核心链路
+角色的运行时数据按物理位置分为三层：
 
 ```
-角色 A（发送方）
-    │
-    │ 调 LLM → LLM 决定"给角色 B 发消息"
-    │ Agent 代码识别发消息意图 → 发布事件
-    ▼
-event_bus.publish("role.message", {
-    from_role: "designer_A",
-    to_role: "dev_role",
-    session_id: "dev↔designer_A__project_X_login",
-    content: "按钮从蓝色改成绿色，字体16→20px"
-})
-    │
-    ▼
-role_comm（信箱）
-    ├── 1. 存储到 SQLite（含 session_id）
-    └── 2. 发布 role.message_received 事件
-    │
-    ▼
-角色 B（接收方）
-    │
-    │ 收到事件 → 标记"有未读消息"（内存计数器）
-    │ 下次空闲时 → 调 LLM 处理
-    │ LLM context 中：该 session 的历史 + 新消息
-    ▼
-角色 B 执行任务 → 回复设计师
+① Ad-hoc 层（临时会话）
+   存储：~/.suri/runtime/roles/{role_id}/adhoc/{session_id}/role.db
+   特点：聊完归档、7天自动清理（cron_service 负责）、不沉淀为长期记忆
+   隔离度：★★★★★
+
+② Project 层（项目工作）
+   存储：~/.suri/runtime/roles/{role_id}/projects/{project_id}/role.db
+   特点：完整记忆系统、切换时保存快照+加载新项目
+   隔离度：★★★★★
+
+③ Global 层（全局记忆）
+   存储：~/.suri/runtime/roles/{role_id}/global/role.db
+   特点：所有项目共享、沉淀通用技能、永久保留
+   隔离度：★★☆☆☆
 ```
 
-### 6.2 Token 消耗模型
+### 4.2 运行时维度 — Context 五层结构
 
-```
-完整链路消耗：
-  ┌──────────────────────────────────────────────┐
-  │ 步骤 1: 角色 A 调 LLM（决定发消息）            │
-  │   ├─ LLM 调用：1 次                           │
-  │   ├─ Token：1~3K（正常对话增量）               │
-  │   └─ 这是 A 思考的代价，不可压缩                │
-  ├──────────────────────────────────────────────┤
-  │ 步骤 2: 事件传递（role_comm 存储转发）          │
-  │   ├─ 事件总线：纯内存操作，毫秒级               │
-  │   └─ Token：0                                │
-  ├──────────────────────────────────────────────┤
-  │ 步骤 3: 角色 B 调 LLM（处理消息 + 执行）        │
-  │   ├─ LLM 调用：1 次                           │
-  │   ├─ Token：3~10K（取决于任务复杂度）            │
-  │   ├─ 多条消息可批量处理，仍然 1 次调用           │
-  │   └─ 这是 B 工作的代价，不可压缩                │
-  ├──────────────────────────────────────────────┤
-  │ 总计：2 次 LLM 调用 / 4~13K token             │
-  └──────────────────────────────────────────────┘
-```
+> **当前 V0.5 实现**：使用字符串拼接构建 Context。
+> **V2.0 目标**：实现完整的 Context Manager（五层结构 + 三级缓存）。
+> 详见 `prd/plugins/capability/llm_gateway.md` §三。
 
-### 6.3 session_id 隔离不同对话
-
-```
-role_comm 中的每条消息携带 session_id：
-
-  "dev↔designer_A__project_X_login"    # 项目X的开发↔设计师
-  "dev↔suri__upgrade_code_tool"         # suri安排开发升级插件
-  "suri↔user_张三__project_Z"           # suri和用户的聊天
-
-角色查询未读消息时，按 session_id 分组返回：
-  ┌────────────────────────────────────────────┐
-  │ session A: 3 条未读（dev↔designer_A）       │
-  │ session B: 1 条未读（dev↔suri）             │
-  └────────────────────────────────────────────┘
-
-角色调 LLM 时，一次只处理一个 session 的 context。
-不同 session 的历史互不干扰。
-```
-
-### 6.4 通信边界
-
-| 通信链路 | 路径 | 说明 |
-|---------|------|------|
-| 角色 ↔ 角色 | `role.message` 事件 + role_comm | 自然语言，事件驱动 |
-| 角色 ↔ 用户 | `session-hub`（access 层） | 用户可见，走 session 协议 |
-| 角色 ↔ 插件 | 工具调用（tool_call） | 不走 role_comm，不走 LLM |
-
-### 6.5 事件不会泛滥的原因
-
-| 设计 | 效果 |
-|------|------|
-| **点对点通知** | 只通知接收方，不广播（特别广播除外） |
-| **角色非实时响应** | 角色只在空闲 + 有消息时才调 LLM，非事件来就处理 |
-| **批量处理** | 多条消息攒一次处理，不是每条消息调一次 LLM |
-| **session 隔离** | 不同 session 的消息互不干扰 |
-
-详见 [role_comm.md](../plugins/execution/role_comm.md) 和 [collab-patterns.md](../collaboration/collab-patterns.md)。
-
----
-
-## 七、并发与上下文控制
-
-> 多 Agent 并发 + 上下文模型。确保 N 个 Agent 可同时工作，每个 Task 拥有独立上下文。
-> ⚠️ **说明**：以下为远期架构目标（V2.0+），当前迭代（V0.5）使用简化的字符串拼接模式。
-
-### 7.1 并发架构
-
-```
-所有 Agent 的 LLM 请求
-    │
-    ├── Agent A (task_01: 重构代码)
-    ├── Agent B (task_02: 写测试)
-    ├── Agent C (task_03: 分析日志)
-    └── ...
-    │
-    ▼
-┌──────────────────────────────────────────────┐
-│              llm_gateway                      │
-│  ┌────────────┐ ┌────────────┐ ┌───────────┐ │
-│  │ 请求队列    │ │ 调度引擎    │ │ 模型连接池 │ │
-│  │ ・优先级排序│ │ ・模型路由  │ │ GPT-4    │ │
-│  │ ・FIFO     │ │ ・速率控制  │ │ Claude   │ │
-│  │ ・并行隔离  │ │ ・预算控制  │ │ DeepSeek │ │
-│  │           │ │ ・降级链    │ │ 本地模型  │ │
-│  └────────────┘ └────────────┘ └───────────┘ │
-└──────────────────────────────────────────────┘
-```
-
-**关键能力**：
-
-| 能力 | 说明 |
-|------|------|
-| **请求队列** | 每个请求带优先级（0-3），同优先级 FIFO，高优可抢占低优 |
-| **模型路由** | 按任务类型匹配模型（代码→GPT-4，文档→Claude，聊天→本地） |
-| **速率控制** | 每个模型独立令牌桶（GPT-4: 3 RPM, DeepSeek: 60 RPM） |
-| **预算控制** | 月度预算，按优先级分配比例，超限降级 |
-
-详见 [llm_gateway.md](../plugins/capability/llm_gateway.md)。
-
-### 7.2 上下文模型（远期目标 V2.0+）
-
-```
-每个 Task 拥有独立的 Context 实例
-Context = system_layer + session_layer + task_layer + history_layer + memory_layer
-```
+每个 LLM 请求的上下文由以下五层构成（V2.0）：
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -408,8 +247,9 @@ Context = system_layer + session_layer + task_layer + history_layer + memory_lay
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │ history_layer（对话历史）                                │  │
 │  │ ├ messages 列表（role/user/assistant/tool 消息）         │  │
-│  │ ├ 上限 20 条，超限自动压缩                              │  │
-│  │ └ 压缩时保留最近 5 条完整消息，其余生成摘要              │  │
+│  │ ├ 上限 20 条（`MAX_HISTORY_MESSAGES`）                  │  │
+│  │ ├ 超出上限时 → 最早的被压缩为摘要                        │  │
+│  │ └ 摘要也作为一个消息保留                                  │  │
 │  └────────────────────────────────────────────────────────┘  │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
@@ -421,66 +261,201 @@ Context = system_layer + session_layer + task_layer + history_layer + memory_lay
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**上下文隔离原则**：
-- Agent A 看不到 Agent B 的 context
-- Task_01 看不到 Task_02 的 history
-- 只有 session_layer 被同会话内的 Task 共享
-- memory_layer 按 Task 独立检索角色记忆
-- Agent 间通信是消息传递，不是上下文共享
+**存储维度与运行时维度的关系**：
 
-### 7.3 三级上下文缓存（远期目标 V2.0+）
+| 存储层 | 提供数据给运行时 Context 的哪些层 |
+|--------|--------------------------------|
+| Ad-hoc DB | history_layer + session_layer |
+| Project DB | history_layer + session_layer + memory_layer(项目限定) |
+| Global DB | memory_layer(全局记忆来源) + system_layer(技能) |
+| role/{id}/soul.md | system_layer |
+| role/{id}/skills/ | system_layer(技能描述) |
 
-```
-Hot Tier（内存）   → 正在活跃的 Task context（默认 10 个）
-Warm Tier（SQLite）→ 挂起的 Task context（完整序列化，默认 100 个）
-Cold Tier（磁盘）  → 完成的 Task context（压缩摘要 + 关键产出）
-
-LRU 替换策略：
-  Hot 满 → 最久未活跃的序列化到 Warm
-  Warm 满 → 最旧的压缩摘要移到 Cold
-  Cold 满 → 通知用户清理
-```
-
-### 7.4 上下文生命周期（远期目标 V2.0+）
+### 4.3 项目切换机制
 
 ```
-Task 创建 → Context 创建 → Hot Tier
+角色当前在"电商APP"项目工作
     │
-    ├── Task 调 LLM → Context 在 Hot
-    ├── Task 挂起 → 保留 Hot（短期）/ 移到 Warm（长期）
-    ├── Task 完成 → 移到 Warm（可恢复）
-    ├── Task 派生子任务 → Context.clone()
-    └── LRU 淘汰 → 序列化 + 压缩
+    ├── suri 分配了新任务："去内部工具项目修复登录 bug"
+    │
+    ▼
+suri 发布 project.context_switched 事件
+    │
+    ▼
+developer 角色接收事件：
+    │
+    ├── Step 1: 保存当前项目上下文
+    │   ├─ 从 Project DB 读取当前运行时 Context
+    │   ├─ 压缩为 context_snapshot
+    │   └─ 存入 projects/ecommerce_app/role.db
+    │
+    ├── Step 2: 加载目标项目上下文
+    │   ├─ 从 projects/internal_tools/role.db 读取 context_snapshots
+    │   ├─ 读取项目摘要
+    │   └─ 构建新的运行时 Context
+    │
+    └── Step 3: 开始执行新任务
+        ├─ 所有工具调用自动附加 project_id
+        ├─ 所有新消息写入 internal_tools 的 Project DB
+        └─ 所有新事实写入 internal_tools 的 Project DB
 ```
 
-### 7.5 当前实现（V0.5）说明
-
-当前迭代使用简化的 Context 实现：
+### 4.4 工具调用自动携带元数据
 
 ```python
-# 当前：role_manager._get_system_prompt()
-# 简单拼接 soul + tool_descriptions + message history
-# 无多级缓存、无自动摘要压缩、无 Context.clone()
+# 所有工具调用自动传递上下文元数据
+class RoleAgent:
+    async def call_tool(self, tool_name: str, params: dict):
+        result = await self.mcp_server.call_tool(
+            tool_name=tool_name,
+            params={
+                **params,
+                "_meta": {
+                    "role_id": self.role_id,
+                    "project_id": self.current_project,
+                    "task_id": self.current_task_id,
+                    "session_id": self.current_session_id
+                }
+            }
+        )
+        return result
 ```
-
-| 功能 | 当前 (V0.5) | 规划 (V2.0) |
-|------|------------|-------------|
-| System prompt | 动态拼接 soul.md | 5 层独立 Context |
-| 缓存 | 无 | Hot/Warm/Cold 三级 |
-| 历史管理 | 完整 message list | 自动摘要压缩 |
-| 任务隔离 | 按 session 隔离 | Context.clone() 派生 |
 
 ---
 
-## 八、关键约束
+## 五、角色与插件的关系
 
-1. **suri 按 Soul 行事** — suri 按 `roles/suri/soul.md` 定义的职责处理需求，技能范围内直接处理，范围外调度/升级
+```
+角色 (Role) = 智能体（独立的 Agent）
+  ├── 拥有 Soul 文件 → 自我定义、职责、能力边界
+  ├── 拥有技能 → 通过技能调用插件/MCP 工具
+  ├── 拥有记忆 → 三层隔离的存储系统
+  ├── 拥有学习能力 → 自学、自增技能
+  └── 拥有通信能力 → 与其他角色协作
+
+插件 (Plugin) = 能力提供者
+  ├── 提供工具/服务 → 被角色调用
+  ├── 提供事件处理 → 被 EventBus 调度
+  ├── 插件自身也是 Agent → 可以学习、更新自己的能力
+  └── 不绑定特定角色 → 可被任何角色使用
+```
+
+### suri 角色的特殊地位
+
+```
+suri 是系统唯一的"主人 Agent"（role_type=core）
+  ├── 不可删除
+  ├── 有自己的 Soul（决定其行为边界和偏好）
+  ├── 有自己的技能（持续学习中）
+  ├── 负责处理自己技能范围内的用户需求
+  ├── 负责自我升级：开发插件/增加技能/MCP 工具
+  ├── 负责调度其他角色（需要时）
+  ├── 负责维护三清单体系的一致性
+  ├── 接收广播事件 → 评估系统影响
+  └── 通过自然语言对话开发维护插件和工具
+```
+
+---
+
+## 六、角色通信模型
+
+### 6.1 核心链路
+
+```
+角色 A（发送方）→ 调 LLM → LLM 决定"给角色 B 发消息"
+  → 发布 role.message 事件（含 session_id）
+  → role_comm 存储 + 发布 role.message_received
+  → 角色 B 收到事件 → 下次空闲时处理
+```
+
+### 6.2 session_id 隔离不同对话
+
+```
+role_comm 中的每条消息携带 session_id：
+  "dev↔designer_A__ecommerce_login"     # 项目内的开发↔设计师
+  "dev↔suri__upgrade_code_tool"          # suri 安排任务
+  "suri↔user_张三__project_ecommerce"    # suri 和用户对话
+
+角色查未读消息时按 session_id 分组返回：
+  不同 session 的历史互不干扰
+  LLM 一次只处理一个 session 的 context
+```
+
+---
+
+## 七、suri 通过自然语言维护插件和工具
+
+```
+用户： "能不能让 code_tool 支持批量搜索功能？"
+    │
+    ▼
+suri: "分析需求 → 设计实现 → 开发代码 → 注册新工具 → 广播更新"
+    │
+    ├── 修改对应插件的代码
+    ├── 注册/更新工具（更新 Tool Registry）
+    ├── 广播 tool.registered / tool.updated
+    └── 通知所有角色（特别是正在使用该工具的角色）
+```
+
+**工具进化的四种场景**：
+1. **新增工具**：角色反复做同一模式操作，可封装为工具
+2. **优化工具**：工具响应慢、参数不合理、返回不友好
+3. **扩展工具**：工具需要支持更多场景
+4. **废弃工具**：工具不再被使用、有更好的替代
+
+---
+
+## 八、用户请求处理核心流程
+
+```
+用户: "帮我写一份产品文档"
+    │
+    ▼
+suri 接收需求
+    │
+    ├── 判断：在我的技能范围内吗？
+    │   ├── 能 → suri 自己调用工具处理
+    │   └── 不能 →
+    │       │
+    │       ▼
+    │   判断：是否有合适角色？
+    │       │
+    │       ├── 有 → 检查角色当前项目
+    │       │   ├── 同一项目 → 直接分配
+    │       │   └── 不同项目 → 先切换再分配
+    │       │
+    │       └── 没有 →
+    │           suri 问用户 → 创建角色 → 配置工具 → 开始工作
+    │
+    └── 超出能力范围 → 问用户是否允许升级
+```
+
+---
+
+## 九、关键约束
+
+1. **suri 按 Soul 行事** — suri 按 `roles/suri/soul.md` 定义的职责处理需求
 2. **所有任务由角色技能驱动** — suri 也通过自己的技能执行任务
 3. **角色可以自学习、自增技能** — 通过 role_learner + upgrade_manager
 4. **suri 负责调度、维护、帮助角色成长**
-5. **技能/插件/工具变更通过事件广播通知相关方**
+5. **所有变更加入三清单 + 广播通知** — 角色/工具/插件变更必须同步清单并广播
 6. **所有代码自修改须用户确认**
-7. **插件也是 Agent** — 可以学习更新自己的插件能力
-8. **上下文隔离** — 每个 Task 独立 Context，Agent 间不共享上下文
-9. **LLM 请求全走 llm_gateway** — 不允许任何插件或角色绕过网关直接调用 API
-10. **所有数据写入必须幂等** — 支持重试不造成重复
+7. **上下文隔离** — 存储层三层隔离（Ad-hoc/Project/Global），防止跨项目混淆
+8. **LLM 请求全走 llm_gateway** — 不允许任何插件或角色绕过网关直接调用 API
+9. **所有数据写入必须幂等** — 支持重试不造成重复（需配合文件锁使用，见 `framework-rules.md`）
+10. **工具调用自动携带 _meta** — 自动附加 role_id/project_id/task_id
+11. **角色可用所有工具** — Soul 自然约束，security_service 做安全兜底，不做硬边界白名单
+12. **权限优先级规则**：Soul约束 > 工具权限声明 > 文件沙箱权限，security_service 做最终安全兜底
+
+---
+
+## 十、相关文档索引
+
+| 文档 | 内容 | 本文件中的引用章节 |
+|------|------|------------------|
+| `prd/schema/event-registry.md` | 完整事件注册表（12 大类 60+ 事件） | §三、§九 |
+| `prd/agents/agent-overview.md` | 角色类型、状态、生命周期 | §一、§五 |
+| `prd/overview/design-principles.md` | 解耦设计原则、数据存储规范 | §四、§九 |
+| `prd/plugins/capability/llm_gateway.md` | Context Manager 五层结构 + 三级缓存 | §四 |
+| `prd/operations/framework-rules.md` | 框架核心规则、并发控制、幂等约束 | §九 |
+| `prd/security/security-spec.md` | AST 扫描、文件沙箱、审批令牌 | §九(约束11) |
