@@ -144,11 +144,11 @@ class SuriCorePlugin(PluginInterface):
 
         # 加载 Phase 2 — 核心能力
         print("[suri_core] Step 5/12: 加载核心能力插件...")
-        await self._load_phase(["llm_gateway", "role_manager", "mcp_framework"], "核心能力")
+        await self._load_phase(["llm_gateway", "role_manager", "mcp_framework", "memory_service"], "核心能力")
 
         # 加载 Phase 3 — 执行层
         print("[suri_core] Step 6/12: 加载执行层插件...")
-        await self._load_phase(["agent_registry", "task_planner", "interrupt_handler", "role_comm"], "执行层")
+        await self._load_phase(["agent_registry", "task_planner", "task_scheduler", "interrupt_handler", "role_comm"], "执行层")
 
         # 加载 Phase 4 — 接入层
         print("[suri_core] Step 7/12: 加载接入层插件...")
@@ -215,7 +215,7 @@ class SuriCorePlugin(PluginInterface):
 
                         # 设置状态追踪属性（供 CLI 面板读取）
                         instance._status = "running"
-                        instance._running = True
+                        instance._is_running = True
 
                         # 读取 manifest.json 存为 dict
                         try:
@@ -476,8 +476,8 @@ class SuriCorePlugin(PluginInterface):
             except Exception:
                 pass
         await self._load_phase(["config_service", "log_service", "security_service"], "基础服务")
-        await self._load_phase(["llm_gateway", "role_manager", "mcp_framework"], "核心能力")
-        await self._load_phase(["agent_registry", "task_planner", "interrupt_handler", "role_comm"], "执行层")
+        await self._load_phase(["llm_gateway", "role_manager", "mcp_framework", "memory_service"], "核心能力")
+        await self._load_phase(["agent_registry", "task_planner", "task_scheduler", "interrupt_handler", "role_comm"], "执行层")
         await self._load_phase(["access"], "接入层")
         if self._heartbeat_task and not self._heartbeat_task.done():
             self._heartbeat_task.cancel()

@@ -5,6 +5,7 @@
   - 自动降级、API Key 验证、模型切换
 """
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -289,38 +290,50 @@ class LLMGatewayPlugin(PluginInterface):
 
     async def _on_llm_request(self, event: Event) -> None:
         """处理 llm.request 事件。"""
-        payload = event.payload if hasattr(event, 'payload') else event
-        messages = payload.get("messages", [])
-        session_id = payload.get("session_id", "")
-        request_id = payload.get("request_id", "")
+        try:
+            payload = event.payload if hasattr(event, 'payload') else event
+            messages = payload.get("messages", [])
+            session_id = payload.get("session_id", "")
+            request_id = payload.get("request_id", "")
 
-        # 会话级模型切换
-        provider = self._session_provider.get(session_id, self._active_provider)
-        model = self._session_model.get(session_id, self._active_model)
+            # 会话级模型切换
+            provider = self._session_provider.get(session_id, self._active_provider)
+            model = self._session_model.get(session_id, self._active_model)
 
-        result = await self.chat(messages, provider=provider, model=model)
+            result = await self.chat(messages, provider=provider, model=model)
 
-        if result["success"]:
-            await self._event_bus.publish(Event(
-                event_type="llm.response",
-                source="llm_gateway",
-                payload={
-                    "content": result["content"],
-                    "session_id": session_id,
-                    "provider": provider,
-                    "model": model,
-                    "request_id": request_id,
-                },
-            ))
-        else:
+            if result["success"]:
+                await self._event_bus.publish(Event(
+                    event_type="llm.response",
+                    source="llm_gateway",
+                    payload={
+                        "content": result["content"],
+                        "session_id": session_id,
+                        "provider": provider,
+                        "model": model,
+                        "request_id": request_id,
+                    },
+                ))
+            else:
+                await self._event_bus.publish(Event(
+                    event_type="llm.error",
+                    source="llm_gateway",
+                    payload={
+                        "error_code": result.get("error_code", 0),
+                        "error_message": result.get("error_message", "Unknown error"),
+                        "session_id": session_id,
+                        "provider": provider,
+                    },
+                ))
+        except Exception as e:
             await self._event_bus.publish(Event(
                 event_type="llm.error",
                 source="llm_gateway",
                 payload={
-                    "error_code": result.get("error_code", 0),
-                    "error_message": result.get("error_message", "Unknown error"),
-                    "session_id": session_id,
-                    "provider": provider,
+                    "error_code": 3006,
+                    "error_message": f"LLM 调用异常: {str(e)[:200]}",
+                    "session_id": session_id if 'session_id' in dir() else "",
+                    "provider": provider if 'provider' in dir() else "",
                 },
             ))
 

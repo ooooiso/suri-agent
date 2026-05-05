@@ -43,6 +43,7 @@ class AccessPlugin(PluginInterface):
         self._session_hub: Optional[SessionHub] = None
         self._cli: Optional[CLIChannelPlugin] = None
         self._telegram: Optional[TelegramChannelPlugin] = None
+        self._hot_reload: Optional[HotReloadManager] = None
         # 向下兼容：错误去重映射
         self._last_error_map: Dict[str, tuple] = {}
 
@@ -92,10 +93,19 @@ class AccessPlugin(PluginInterface):
         await self._start_telegram()
 
     async def _start_hot_reload(self, plugin_manager=None) -> None:
-        """启动文件监听热更新。"""
+        """启动文件监听热更新。
+
+        监听 agent_framework/ 下的所有插件目录（plugins、core）。
+        FileWatcher 每 2 秒轮询一次，检测到 .py/.json 变更后：
+          L1: 配置变更 → 插件重载配置
+          L2: manifest.json 变更 → 命令注册表刷新
+          L3: Python 代码变更 → importlib.reload + 插件实例重启
+        """
         try:
+            agent_fw_dir = Path(__file__).parent.parent.parent  # agent_framework/
             scan_dirs = [
-                str(Path(__file__).parent.parent.parent.parent / "plugins"),
+                str(agent_fw_dir / "plugins"),  # agent_framework/plugins/
+                str(agent_fw_dir / "core"),     # agent_framework/core/
             ]
             self._hot_reload = HotReloadManager(
                 self._event_bus,

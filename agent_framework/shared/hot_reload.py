@@ -220,6 +220,15 @@ class HotReloadManager:
         # 已注册的插件热更新处理器
         self._reload_handlers: Dict[str, Callable] = {}
 
+    @staticmethod
+    def _safe_print(text: str) -> None:
+        """安全写入 stderr（不受 stdin non-blocking 影响）。"""
+        try:
+            sys.stderr.write(text + "\n")
+            sys.stderr.flush()
+        except (OSError, BlockingIOError):
+            pass
+
     def register_plugin_reloader(self, plugin_id: str, handler: Callable) -> None:
         """注册插件的热更新处理器。
 
@@ -346,16 +355,18 @@ class HotReloadManager:
             plugin_id = path.parent.name
 
             # 构建完整模块名
+            # agent_framework/plugins/access/formatter.py
+            # → agent_framework.plugins.access.formatter
             parts = []
+            found_framework = False
             for parent in path.parents:
                 if parent.name == "agent_framework":
+                    found_framework = True
                     break
                 parts.insert(0, parent.name)
-            else:
-                if "runtime" in str(path):
-                    parts = ["suri_runtime"] + parts
 
-            module_name = f"{'.'.join(parts)}.{path.stem}"
+            prefix = "agent_framework." if found_framework else ""
+            module_name = f"{prefix}{'.'.join(parts)}.{path.stem}"
 
             # Step 1: 模块重载
             if module_name in sys.modules:
@@ -365,7 +376,7 @@ class HotReloadManager:
                 importlib.import_module(module_name)
                 old_module = sys.modules.get(module_name)
 
-            print(f"[HotReload] ✅ 模块重载: {module_name}")
+            self._safe_print(f"[HotReload] ✅ 模块重载: {module_name}")
 
             # Step 2: 插件实例完整重启（如果有 PluginManager）
             if self._plugin_manager and old_module:
@@ -378,7 +389,7 @@ class HotReloadManager:
                         await old_plugin.stop()
                         await old_plugin.cleanup()
                     except Exception as e:
-                        print(f"[HotReload] ⚠️ 旧插件停止失败: {e}")
+                        self._safe_print(f"[HotReload] ⚠️ 旧插件停止失败: {e}")
 
                     # 从新模块创建新实例
                     for attr in dir(old_module):
@@ -395,9 +406,9 @@ class HotReloadManager:
                             if hasattr(new_instance, 'register_events') and callable(new_instance.register_events):
                                 new_instance.register_events()
 
-                            # 标记运行状态
+                            # 标记运行状态（使用 _is_running 避免覆盖 task_scheduler._running 字典）
                             new_instance._status = "running"
-                            new_instance._running = True
+                            new_instance._is_running = True
 
                             # 启动新实例（如果是 access 插件需要传 plugin_manager）
                             if plugin_id == "access":
@@ -408,7 +419,7 @@ class HotReloadManager:
                             # 替换 PluginManager 中的实例
                             pm._plugins[plugin_id] = new_instance
 
-                            print(f"[HotReload] ✅ 插件 {plugin_id} 已重启为新实例")
+                            self._safe_print(f"[HotReload] ✅ 插件 {plugin_id} 已重启为新实例")
                             break
 
             # Step 3: 发布通知
@@ -422,7 +433,19 @@ class HotReloadManager:
                 priority=Priority.LOW,
             ))
 
-            print(f"[HotReload] ✅ 热重载成功: {file_path}")
+            # Step 4: 发布热重载完成事件（通知 CLI 通道刷新面板）
+            await self._event_bus.publish(Event(
+                event_type="system.hot_reload_completed",
+                source="hot_reload",
+                payload={
+                    "plugin_id": plugin_id,
+                    "file_path": file_path,
+                    "reloaded_modules": [module_name],
+                },
+                priority=Priority.HIGH,
+            ))
+
+            self._safe_print(f"[HotReload] ✅ 热重载成功: {file_path}")
 
         except Exception as e:
-            print(f"[HotReload] ❌ 热重载失败 {file_path}: {e}")
+            self._safe_print(f"[HotReload] ❌ 热重载失败 {file_path}: {e}")

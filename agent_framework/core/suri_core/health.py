@@ -229,16 +229,34 @@ def check_plugins(plugins_dir: Path) -> List[HealthCheckItem]:
         return items
     
     try:
-        manifests = list(plugins_dir.rglob("manifest.json"))
+        # 递归扫描两层插件目录（depth=2）：
+        # 顶层: plugins/access/manifest.json
+        # 子目录: plugins/capability/llm_gateway/manifest.json
+        manifests = []
+        for p in plugins_dir.iterdir():
+            if not p.is_dir():
+                continue
+            if p.name == "channels":
+                continue  # channels/ 是 access 的子模块，不算独立插件
+            # 深度1：直接子目录
+            mf = p / "manifest.json"
+            if mf.exists():
+                manifests.append(mf)
+            else:
+                # 深度2：子目录的子目录
+                for sub in p.iterdir():
+                    if sub.is_dir() and sub.name != "__pycache__":
+                        mf2 = sub / "manifest.json"
+                        if mf2.exists():
+                            manifests.append(mf2)
         plugin_names = []
         missing_plugins = []
         
-        # 期望的关键插件
+        # 期望的关键插件（code_tool 已弃用，集成到 MCP）
         expected = [
             "config_service", "log_service", "security_service",
             "llm_gateway", "role_manager",
             "task_planner", "task_scheduler", "interrupt_handler",
-            "code_tool",
         ]
         
         found_expected = []

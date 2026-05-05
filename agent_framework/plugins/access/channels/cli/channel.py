@@ -504,9 +504,40 @@ class CLIChannelPlugin(BaseChannel):
             self._event_bus.subscribe("system.plugin_unloaded", self._on_plugin_event)
             self._event_bus.subscribe("plugin.status_changed", self._on_plugin_event)
             self._event_bus.subscribe("plugin.manifest_updated", self._on_plugin_event)
+            self._event_bus.subscribe("system.hot_reload_completed", self._on_hot_reload_completed)
 
         # 显示启动面板
         await self._show_startup_panel()
+
+        # 检测是否所有 LLM 厂商都不可用（无健康数据或无 Key）
+        has_online = any(
+            pid in self._api_keys_cache and bool(self._api_keys_cache[pid])
+            for pid in self._providers_cache
+        )
+        if not has_online or not self._api_keys_cache:
+            # 自动弹出交互式配置菜单引导用户配置
+            # 使用 loop.run_in_executor 包装同步 input()，
+            # 因为此时 _input_loop 尚未启动，_input_queue 无人填充
+            self.print_system(
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "  ⚠️ 未检测到可用的 LLM 连接\n"
+                "  🔧 正在启动配置向导..."
+            )
+            loop = asyncio.get_running_loop()
+            async def _menu_input(prompt: str = "") -> str:
+                """配置菜单专用输入：使用同步 input()，不依赖 _input_queue。"""
+                return await loop.run_in_executor(None, lambda: input(prompt))
+            from agent_framework.plugins.access.config_editor import ConfigEditor
+            editor = ConfigEditor(self._event_bus, input_func=_menu_input)
+            await editor.run_menu()
+            # 配置完成后重载
+            self._load_config()
+            self._plugins_cache = await self._fetch_plugins()
+            if hasattr(self, '_plugin_manager') and self._plugin_manager:
+                llm_gw = self._plugin_manager._plugins.get('llm_gateway')
+                if llm_gw and hasattr(llm_gw, 'get_health'):
+                    self._health_cache = llm_gw.get_health()
+            await self._show_startup_panel()
 
         # 启动纯 asyncio 输入循环（自动显示 > 提示符）
         self._task = asyncio.create_task(self._input_loop())
@@ -587,6 +618,9 @@ class CLIChannelPlugin(BaseChannel):
         - 先打印 `> 用户输入` 标记用户发言
         - 再打印 LLM 回复
         - 用户能清晰区分"我说的"和"suri 说的"
+
+        热更新：统一由 HotReloadManager 的 FileWatcher 后台每 2 秒轮询完成，
+        所有通道（CLI/Telegram/飞书/微信）共享同一套机制，无需单独触发。
         """
         raw = text.strip()
         if not raw:
@@ -1172,8 +1206,15 @@ class CLIChannelPlugin(BaseChannel):
                     s = plugin._status
                     if s in ("running", "initialized", "paused", "stopped"):
                         status = s
+                elif hasattr(plugin, '_is_running'):
+                    status = "running" if plugin._is_running else "stopped"
                 elif hasattr(plugin, '_running'):
-                    status = "running" if plugin._running else "stopped"
+                    # _running 可能是 bool（suri_core）或 dict（task_scheduler）
+                    val = plugin._running
+                    if isinstance(val, bool):
+                        status = "running" if val else "stopped"
+                    elif isinstance(val, dict):
+                        status = "running"
                 
                 plugins.append({
                     "id": pid,
@@ -1315,6 +1356,43 @@ class CLIChannelPlugin(BaseChannel):
 
             notification = f"⚠️ [{label}] {plugin_id}{status_text}"
             self._pm.on_output(notification)
+
+    async def _on_hot_reload_completed(self, event: Event) -> None:
+        """热重载完成后，全量刷新终端面板。
+
+        用户需求："代码更新以后，终端输入任何内容，终端都直接刷新所有数据"
+        
+        执行全量刷新：
+        1. 重取插件元数据
+        2. 重载配置
+        3. 重取 LLM 健康数据
+        4. 重绘启动面板（插件列表 + 模型状态）
+        5. 不破坏输入循环
+        """
+        if not self._started:
+            return
+
+        plugin_id = event.payload.get("plugin_id", "")
+        file_path = event.payload.get("file_path", "")
+
+        # 1. 重取插件
+        self._plugins_cache = await self._fetch_plugins()
+
+        # 2. 重载配置
+        self._load_config()
+
+        # 3. 重取 LLM 健康数据
+        if hasattr(self, '_plugin_manager') and self._plugin_manager:
+            llm_gw = self._plugin_manager._plugins.get('llm_gateway')
+            if llm_gw and hasattr(llm_gw, 'get_health'):
+                self._health_cache = llm_gw.get_health()
+
+        # 4. 输出提示 + 重绘面板
+        self.print_system(
+            f"🔄 热重载完成: {plugin_id}\n"
+            f"   文件: {Path(file_path).name}"
+        )
+        await self._show_startup_panel()
 
     async def _handle_plugin_manage(self, args: List[str]) -> None:
         """处理插件管理命令: /plugin start|stop|restart|upgrade|remove <编号>。
